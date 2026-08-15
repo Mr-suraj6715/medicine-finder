@@ -662,6 +662,13 @@ export default function Home() {
       if (!map.has(inv.pharmacy.name)) {
         const predefined = NEARBY_PHARMACIES.find(p => p.name === inv.pharmacy.name);
         const distance = (inv.pharmacy.distance && inv.pharmacy.distance !== 0) ? inv.pharmacy.distance : (predefined ? (parseFloat(predefined.dist) || 1.2) : 1.5);
+        // Use real availability from DB if available, else fall back to predefined
+        const isAvailable = inv.pharmacy.isAvailable !== undefined ? inv.pharmacy.isAvailable : true;
+        const openingTime = inv.pharmacy.openingTime || "9:00 AM";
+        const closingTime = inv.pharmacy.closingTime || "9:00 PM";
+        const openLabel = isAvailable
+          ? `Open till ${closingTime}`
+          : `Closed (Opens at ${openingTime})`;
         map.set(inv.pharmacy.name, {
           name: inv.pharmacy.name,
           rating: (4.0 + Math.random() * 0.9).toFixed(1),
@@ -671,8 +678,9 @@ export default function Home() {
           distValue: distance,
           timeValue: Math.round(distance * 12 + 5),
           time: `${Math.round(distance * 12 + 5)} min`,
-          open: predefined ? predefined.open : "Open now",
-          badge: predefined ? predefined.badge : null,
+          open: predefined ? predefined.open : openLabel,
+          isAvailable,
+          badge: predefined ? predefined.badge : (isAvailable ? null : "Closed"),
           lat: (inv.pharmacy.latitude && inv.pharmacy.latitude !== 0) ? inv.pharmacy.latitude : (predefined ? predefined.lat : 19.0760),
           lng: (inv.pharmacy.longitude && inv.pharmacy.longitude !== 0) ? inv.pharmacy.longitude : (predefined ? predefined.lng : 72.8777),
           price: inv.price,
@@ -1314,15 +1322,23 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-0.5">
                       <h4 className="font-bold text-slate-900 text-sm truncate">{p.name}</h4>
-                      {p.badge && <span className="text-[9px] font-black text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full uppercase tracking-tighter">{p.badge}</span>}
+                      {p.badge && (
+                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${p.badge === "Closed" ? "text-rose-600 bg-rose-50" : "text-sky-600 bg-sky-50"}`}>{p.badge}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 mb-1.5">
                       <div className="flex items-center gap-0.5 text-amber-500"><Star size={10} fill="currentColor" /></div>
                       <span className="text-[10px] font-black text-slate-700">{p.rating || "4.5"}</span>
                       <span className="text-[10px] text-slate-400 font-medium">{p.reviews || "(120+)"}</span>
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-500 mb-3 font-medium truncate">
+                    <div className="flex items-center gap-1 text-[10px] text-slate-500 mb-1 font-medium truncate">
                       <MapPin size={10} className="text-slate-400" /> {p.location || "Mumbai, Maharashtra"}
+                    </div>
+                    {/* Open/Closed status */}
+                    <div className="mb-2">
+                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${(p as any).isAvailable === false ? "bg-rose-50 text-rose-500" : "bg-green-50 text-green-600"}`}>
+                        {(p as any).open || "Open now"}
+                      </span>
                     </div>
                     <div className="flex items-center gap-4 text-[10px] font-black">
                       <span className="flex items-center gap-1 text-sky-600 bg-sky-50 px-2 py-1 rounded-lg">

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   HeartPulse, ShoppingCart, Package, MapPin, Star, Pill, LogOut,
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
-  Activity, History, Navigation, X, Menu
+  Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store
 } from "lucide-react";
 
 type AuthUser = { id: string; email: string; name: string; role: string; loyaltyPoints: number };
@@ -47,6 +47,159 @@ function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title
   );
 }
 
+// ── Order Details Modal ────────────────────────────────────────────
+function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[200] bg-slate-900/70 backdrop-blur-md flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className={`p-6 text-white relative ${order.isEmergency ? "bg-gradient-to-br from-rose-500 to-rose-700" : "bg-gradient-to-br from-green-500 to-green-700"}`}>
+          <button onClick={onClose} className="absolute top-4 right-4 bg-white/20 hover:bg-white/30 p-1.5 rounded-full transition-colors">
+            <X size={18} />
+          </button>
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center">
+              <CheckCircle size={24} />
+            </div>
+            <div>
+              <p className="text-white/70 text-xs font-bold uppercase tracking-widest">Order Details</p>
+              <h2 className="text-xl font-black">{order.trackingNumber || order.id?.slice(-8)}</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <span className={`text-[10px] font-black px-3 py-1 rounded-full bg-white/20`}>
+              {order.status?.replace(/_/g, " ")}
+            </span>
+            {order.isEmergency && <span className="text-[10px] font-black px-3 py-1 rounded-full bg-white text-rose-600 animate-pulse">EMERGENCY</span>}
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          {/* Medicines */}
+          <div>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Medicines Ordered</h3>
+            <div className="space-y-2">
+              {order.items?.map((item: any) => (
+                <div key={item.id} className="flex items-center gap-3 bg-slate-50 rounded-xl p-3">
+                  <div className="w-9 h-9 bg-sky-50 rounded-xl flex items-center justify-center shrink-0">
+                    <Pill size={16} className="text-sky-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-slate-900 truncate">{item.inventory?.medicine?.name}</p>
+                    <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                      <Store size={10} /> {item.inventory?.pharmacy?.name}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-xs font-black text-slate-800">×{item.quantity}</p>
+                    <p className="text-[11px] text-slate-500">₹{(item.priceAtTime * item.quantity).toFixed(2)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Price Breakdown */}
+          <div className="bg-slate-50 rounded-2xl p-4">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Price Breakdown</h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between text-slate-600">
+                <span>Subtotal</span>
+                <span>₹{(order.totalAmount - (order.surgeFee || 0) + (order.discountApplied || 0)).toFixed(2)}</span>
+              </div>
+              {order.discountApplied > 0 && (
+                <div className="flex justify-between text-green-600 font-medium">
+                  <span className="flex items-center gap-1"><Gift size={12} /> Bulk Discount</span>
+                  <span>-₹{order.discountApplied.toFixed(2)}</span>
+                </div>
+              )}
+              {order.isEmergency && order.surgeFee > 0 && (
+                <div className="flex justify-between text-rose-500 font-medium">
+                  <span>Emergency Surge Fee</span>
+                  <span>+₹{order.surgeFee.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-black text-base border-t border-slate-200 pt-2 mt-1">
+                <span>Total Paid</span>
+                <span className="text-green-600">₹{order.totalAmount.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery Info */}
+          <div>
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Delivery Info</h3>
+            <div className="space-y-2">
+              <div className="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+                <MapPin size={16} className="text-sky-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-slate-700">Delivery Address</p>
+                  <p className="text-[11px] text-slate-500">{order.deliveryAddress || "—"}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+                <Clock size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-slate-700">Order Date</p>
+                  <p className="text-[11px] text-slate-500">
+                    {new Date(order.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+                <Package size={16} className="text-indigo-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold text-slate-700">Payment Method</p>
+                  <p className="text-[11px] text-slate-500">{order.paymentMethod === "CASH_ON_DELIVERY" ? "Cash on Delivery" : "Online Payment"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Rider Info */}
+          {order.rider && (
+            <div>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Delivery Partner</h3>
+              <div className="flex items-center gap-3 bg-slate-900 text-white rounded-2xl p-4">
+                <div className="w-12 h-12 bg-sky-500 rounded-xl flex items-center justify-center text-white text-xl font-black shrink-0">
+                  {order.rider.name?.[0]?.toUpperCase() || "R"}
+                </div>
+                <div className="flex-1">
+                  <p className="font-black">{order.rider.name}</p>
+                  <p className="text-[11px] text-slate-400">{order.rider.email}</p>
+                  {order.rider.riderRating && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Star size={11} className="text-amber-400 fill-amber-400" />
+                      <span className="text-xs font-bold text-amber-400">{order.rider.riderRating.toFixed(1)}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Loyalty Points Earned */}
+          {order.loyaltyEarned > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-center gap-3">
+              <Gift size={20} className="text-amber-500 shrink-0" />
+              <div>
+                <p className="font-black text-amber-800 text-sm">+{order.loyaltyEarned} Loyalty Points Earned!</p>
+                <p className="text-[11px] text-amber-600">Points have been added to your account</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="p-5 bg-slate-50 border-t border-slate-100">
+          <button onClick={onClose} className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3 rounded-2xl font-black text-sm transition-all active:scale-95">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [tab, setTab] = useState<"orders" | "profile" | "health">("orders");
@@ -56,6 +209,8 @@ export default function UserDashboard() {
   const [userAddresses, setUserAddresses] = useState<any[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [newAddress, setNewAddress] = useState({ label: "Home", address: "" });
+  const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
   const fetchAddresses = useCallback(async (uid: string) => {
     try {
@@ -64,8 +219,8 @@ export default function UserDashboard() {
       if (data.addresses) setUserAddresses(data.addresses);
     } catch (err) { console.error(err); }
   }, []);
+
   const [healthLogs, setHealthLogs] = useState<any[]>([]);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
   const [isTrackingMode, setIsTrackingMode] = useState(false);
 
@@ -74,14 +229,12 @@ export default function UserDashboard() {
     if (!stored) { window.location.href = "/"; return; }
     try {
       const u = JSON.parse(stored);
-      // Strictly verify role for this dashboard
       if (u.role !== "user") {
         if (u.role === "shop_owner") window.location.href = "/dashboard/shop";
         else if (u.role === "rider") window.location.href = "/dashboard/rider";
         else window.location.href = "/";
         return;
       }
-
       setUser(u);
       setLoyaltyPoints(u.loyaltyPoints || 0);
     } catch { window.location.href = "/"; }
@@ -95,12 +248,13 @@ export default function UserDashboard() {
     } catch {}
   }, []);
 
-  const fetchOrders = useCallback(async (email: string) => {
+  const fetchOrders = useCallback(async (email: string, silent = false) => {
     try {
+      if (!silent) setLoadingOrders(true);
       const res = await fetch(`/api/orders?email=${email}`);
       const data = await res.json();
       setOrders(data.orders || []);
-    } catch {} finally { setLoadingOrders(false); }
+    } catch {} finally { if (!silent) setLoadingOrders(false); }
   }, []);
 
   const fetchHealthLogs = useCallback(async (email: string) => {
@@ -119,9 +273,9 @@ export default function UserDashboard() {
       fetchHealthLogs(user.email);
       
       const interval = setInterval(() => {
-        fetchOrders(user.email);
+        fetchOrders(user.email, true);
         fetchLoyalty(user.email);
-      }, 5000); // Poll every 5 seconds
+      }, 5000);
       return () => { if (interval) clearInterval(interval); };
     }
   }, [user, fetchOrders, fetchLoyalty, fetchAddresses, fetchHealthLogs]);
@@ -143,6 +297,18 @@ export default function UserDashboard() {
     localStorage.removeItem("medifind_user_shop_owner");
     localStorage.removeItem("medifind_user_rider");
     window.location.href = "/";
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!window.confirm("Delete this address?")) return;
+    setDeletingAddressId(id);
+    try {
+      const res = await fetch(`/api/user/address?id=${id}`, { method: "DELETE" });
+      if (res.ok) {
+        setUserAddresses(prev => prev.filter(a => a.id !== id));
+      }
+    } catch (err) { console.error(err); }
+    finally { setDeletingAddressId(null); }
   };
 
   const totalSpent = orders.reduce((a, o) => a + o.totalAmount, 0);
@@ -241,6 +407,9 @@ export default function UserDashboard() {
                   <div>
                     <div className="flex items-center gap-3 mb-1">
                       <code className="text-xs bg-slate-100 px-2 py-0.5 rounded font-mono text-slate-700">{order.trackingNumber || "—"}</code>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${STATUS_COLORS[order.status] || "bg-slate-100 text-slate-600 border-slate-200"}`}>
+                        {order.status?.replace(/_/g, " ")}
+                      </span>
                       {order.isEmergency && (
                         <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-500 text-white flex items-center gap-1 animate-pulse">
                           <Activity size={10} /> EMERGENCY
@@ -279,14 +448,23 @@ export default function UserDashboard() {
                       <span>Est. delivery: <strong className="text-slate-700">{new Date(order.estimatedDelivery || Date.now()).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</strong></span>
                     )}
                   </div>
-                  {order.status !== "DELIVERED" && (
-                    <button 
-                      onClick={() => { setTrackingOrder(order); setIsTrackingMode(true); }}
-                      className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95"
+                  <div className="flex gap-2">
+                    {/* View Details button for all orders */}
+                    <button
+                      onClick={() => setSelectedOrder(order)}
+                      className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition-all active:scale-95"
                     >
-                      <Navigation size={12} /> Track Order
+                      <Eye size={12} /> Details
                     </button>
-                  )}
+                    {order.status !== "DELIVERED" && (
+                      <button
+                        onClick={() => { setTrackingOrder(order); setIsTrackingMode(true); }}
+                        className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all active:scale-95"
+                      >
+                        <Navigation size={12} /> Track Order
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}
@@ -355,6 +533,7 @@ export default function UserDashboard() {
                 ))}
               </div>
 
+              {/* Saved Addresses */}
               <div className="mt-8">
                 <div className="flex justify-between items-center mb-4">
                   <h4 className="font-black text-slate-900 text-sm uppercase tracking-widest">Saved Addresses</h4>
@@ -367,16 +546,28 @@ export default function UserDashboard() {
                     {userAddresses.map(addr => (
                       <div key={addr.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 flex items-start gap-3">
                         <MapPin size={16} className="text-sky-500 shrink-0 mt-0.5" />
-                        <div className="min-w-0">
+                        <div className="flex-1 min-w-0">
                           <p className="text-xs font-black text-slate-700">{addr.label}</p>
-                          <p className="text-[11px] text-slate-500 leading-relaxed truncate">{addr.address}</p>
+                          <p className="text-[11px] text-slate-500 leading-relaxed">{addr.address}</p>
                         </div>
+                        <button
+                          onClick={() => handleDeleteAddress(addr.id)}
+                          disabled={deletingAddressId === addr.id}
+                          className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-colors disabled:opacity-50 shrink-0"
+                          title="Delete address"
+                        >
+                          {deletingAddressId === addr.id
+                            ? <div className="w-3 h-3 border-2 border-rose-400 border-t-transparent rounded-full animate-spin" />
+                            : <Trash2 size={14} />
+                          }
+                        </button>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             </div>
+
             <div className="space-y-4">
               <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-2xl p-5">
                 <div className="flex items-center gap-3 mb-3">
@@ -422,17 +613,17 @@ export default function UserDashboard() {
               </div>
               <h2 className="text-2xl font-black mb-1">{trackingOrder.isEmergency ? "Emergency Dispatch!" : "Order Confirmed!"}</h2>
               <div className="flex flex-col items-center gap-1">
-                <p className="text-white/80 text-sm">Tracking: <code className="bg-white/20 px-2 py-0.5 rounded font-mono">{trackingOrder.id}</code></p>
+                <p className="text-white/80 text-sm">Tracking: <code className="bg-white/20 px-2 py-0.5 rounded font-mono">{trackingOrder.trackingNumber || trackingOrder.id}</code></p>
                 {trackingOrder.isEmergency && <span className="text-[10px] font-black bg-white text-rose-600 px-3 py-1 rounded-full uppercase tracking-widest shadow-sm mt-1">Priority Delivery Activated</span>}
               </div>
             </div>
             <div className="p-8">
-              {/* Progress Line */}
+              {/* Progress */}
               <div className="mb-12 relative px-4">
                 <div className="absolute top-4 left-4 right-4 h-1 bg-slate-100 rounded-full"></div>
-                <div 
+                <div
                   className={`absolute top-4 left-4 h-1 rounded-full transition-all duration-1000 ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-sky-500"}`}
-                  style={{ 
+                  style={{
                     width: `${
                       trackingOrder.status === "PENDING" ? "5%" :
                       trackingOrder.status === "PROCESSING" ? "20%" :
@@ -441,7 +632,7 @@ export default function UserDashboard() {
                       trackingOrder.status === "RIDER_AT_PHARMACY" ? "80%" :
                       trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" :
                       trackingOrder.status === "DELIVERED" ? "100%" : "0%"
-                    }` 
+                    }`
                   }}
                 ></div>
                 <div className="flex justify-between relative mt-1">
@@ -479,8 +670,6 @@ export default function UserDashboard() {
                       const statusSteps = ["PENDING", "PROCESSING", "CONFIRMED", "RIDER_ASSIGNED", "RIDER_AT_PHARMACY", "RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER", "DELIVERED"];
                       const currentIndex = statusSteps.indexOf(trackingOrder.status);
                       const completed = i <= currentIndex;
-                      const active = i === currentIndex;
-
                       return (
                         <div key={s.id} className="flex gap-4 items-start relative z-10">
                           <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-4 border-white shadow-sm transition-all duration-500 ${completed ? (trackingOrder.isEmergency ? "bg-rose-500 text-white" : "bg-sky-600 text-white") : "bg-slate-100 text-slate-400"}`}>
@@ -497,25 +686,39 @@ export default function UserDashboard() {
                 </div>
                 <div>
                   <div className="h-64 rounded-3xl overflow-hidden border border-slate-100 shadow-xl mb-6 relative">
-                    <LeafletMap 
-                      lat={trackingOrder.deliveryLat || 19.076} 
-                      lng={trackingOrder.deliveryLng || 72.8777} 
-                      title="Delivery Location" 
-                      zoom={14} 
+                    <LeafletMap
+                      lat={trackingOrder.deliveryLat || 19.076}
+                      lng={trackingOrder.deliveryLng || 72.8777}
+                      title="Delivery Location"
+                      zoom={14}
                     />
                   </div>
                   <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl">
                     <div className="flex justify-between items-center mb-4">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Estimated Delivery</p>
-                      <p className="text-xl font-black text-sky-400">12:45 PM</p>
+                      <p className="text-xl font-black text-sky-400">
+                        {trackingOrder.estimatedDelivery ? new Date(trackingOrder.estimatedDelivery).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "Soon"}
+                      </p>
                     </div>
-                    <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl">
-                      <div className="w-10 h-10 bg-sky-500 rounded-xl flex items-center justify-center text-white"><Activity size={20} /></div>
-                      <div>
-                        <p className="font-bold text-sm">Rider: Aryan Singh</p>
-                        <p className="text-[10px] text-slate-400">Rating: 4.8 ★</p>
+                    {trackingOrder.rider ? (
+                      <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl">
+                        <div className="w-10 h-10 bg-sky-500 rounded-xl flex items-center justify-center text-white font-black">
+                          {trackingOrder.rider.name?.[0]?.toUpperCase() || "R"}
+                        </div>
+                        <div>
+                          <p className="font-bold text-sm">Rider: {trackingOrder.rider.name}</p>
+                          {trackingOrder.rider.riderRating && <p className="text-[10px] text-slate-400">Rating: {trackingOrder.rider.riderRating.toFixed(1)} ★</p>}
+                        </div>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="flex items-center gap-3 bg-white/10 p-3 rounded-2xl">
+                        <div className="w-10 h-10 bg-slate-600 rounded-xl flex items-center justify-center text-white"><Activity size={20} /></div>
+                        <div>
+                          <p className="font-bold text-sm">Awaiting Rider</p>
+                          <p className="text-[10px] text-slate-400">A rider will be assigned soon</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -528,6 +731,10 @@ export default function UserDashboard() {
           </div>
         </div>
       )}
+
+      {/* ── ORDER DETAILS MODAL ── */}
+      {selectedOrder && <OrderDetailsModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+
       {/* ── ADDRESS MODAL ── */}
       {showAddressModal && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -545,14 +752,14 @@ export default function UserDashboard() {
               </div>
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Full Address</label>
-                <textarea 
-                  value={newAddress.address} 
+                <textarea
+                  value={newAddress.address}
                   onChange={e => setNewAddress(p => ({ ...p, address: e.target.value }))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 min-h-[100px] resize-none"
                   placeholder="Street, Landmark, Apartment, City..."
                 />
               </div>
-              <button 
+              <button
                 onClick={async () => {
                   if (!user || !newAddress.address.trim()) return;
                   const res = await fetch("/api/user/address", {

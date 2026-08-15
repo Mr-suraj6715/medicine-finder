@@ -21,6 +21,7 @@ export async function GET(req: Request) {
             },
           },
         },
+        rider: true,
       },
       orderBy: { createdAt: 'desc' },
     });

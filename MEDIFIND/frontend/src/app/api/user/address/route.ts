@@ -40,3 +40,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to create address' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+  if (!id) return NextResponse.json({ error: 'Address ID required' }, { status: 400 });
+
+  try {
+    await prisma.address.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Address deletion error:', error);
+    return NextResponse.json({ error: 'Failed to delete address' }, { status: 500 });
+  }
+}

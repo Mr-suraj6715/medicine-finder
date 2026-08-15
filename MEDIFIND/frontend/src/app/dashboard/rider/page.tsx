@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   HeartPulse, Package, LogOut, Navigation, CheckCircle, 
-  Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award
+  Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
 import dynamic from "next/dynamic";
 
@@ -11,22 +11,27 @@ const TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), 
 const Marker = dynamic(() => import("react-leaflet").then(m => m.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then(m => m.Popup), { ssr: false });
 const Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
-const UseMapEvents = dynamic(() => import("react-leaflet").then(m => {
-  const { useMap } = m;
-  function FlyTo({ lat, lng, zoom = 15 }: { lat: number; lng: number; zoom?: number }) {
-    const map = useMap();
-    useEffect(() => { 
-      if (lat && lng) map.flyTo([lat, lng], zoom, { animate: true, duration: 1.5 }); 
-    }, [lat, lng, zoom, map]);
-    return null;
-  }
-  return FlyTo;
-}), { ssr: false });
 
-let L: any;
-if (typeof window !== "undefined") L = require("leaflet");
+type AuthUser = { id: string; email: string; name: string; role: string; phone?: string; address?: string; vehicleType?: string };
+
+const STATUS_COLORS: Record<string, string> = {
+  PENDING: "bg-amber-100 text-amber-700 border-amber-200",
+  PROCESSING: "bg-blue-100 text-blue-700 border-blue-200",
+  CONFIRMED: "bg-indigo-100 text-indigo-700 border-indigo-200",
+  RIDER_ASSIGNED: "bg-sky-100 text-sky-700 border-sky-200",
+  RIDER_AT_PHARMACY: "bg-cyan-100 text-cyan-700 border-cyan-200",
+  RIDER_PICKED_UP: "bg-teal-100 text-teal-700 border-teal-200",
+  OUT_FOR_DELIVERY: "bg-purple-100 text-purple-700 border-purple-200",
+  REACHED_CUSTOMER: "bg-pink-100 text-pink-700 border-pink-200",
+  DELIVERED: "bg-green-100 text-green-700 border-green-200",
+  CANCELLED: "bg-rose-100 text-rose-700 border-rose-200",
+  FAILED: "bg-slate-100 text-slate-700 border-slate-200",
+};
 
 function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: any; rider: any }) {
+  let L: any;
+  if (typeof window !== "undefined") L = require("leaflet");
+
   const shopIcon = typeof window !== "undefined" ? L?.icon({
     iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -40,7 +45,7 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
   }) : undefined;
 
   const riderIcon = typeof window !== "undefined" ? L?.icon({
-    iconUrl: "https://cdn-icons-png.flaticon.com/512/2972/2972185.png", // Bike icon
+    iconUrl: "https://cdn-icons-png.flaticon.com/512/2972/2972185.png",
     iconSize: [35, 35], iconAnchor: [17, 35], popupAnchor: [0, -35]
   }) : undefined;
 
@@ -72,25 +77,9 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
   );
 }
 
-type AuthUser = { id: string; email: string; name: string; role: string };
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-700 border-amber-200",
-  PROCESSING: "bg-blue-100 text-blue-700 border-blue-200",
-  CONFIRMED: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  RIDER_ASSIGNED: "bg-sky-100 text-sky-700 border-sky-200",
-  RIDER_AT_PHARMACY: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  RIDER_PICKED_UP: "bg-teal-100 text-teal-700 border-teal-200",
-  OUT_FOR_DELIVERY: "bg-purple-100 text-purple-700 border-purple-200",
-  REACHED_CUSTOMER: "bg-pink-100 text-pink-700 border-pink-200",
-  DELIVERED: "bg-green-100 text-green-700 border-green-200",
-  CANCELLED: "bg-rose-100 text-rose-700 border-rose-200",
-  FAILED: "bg-slate-100 text-slate-700 border-slate-200",
-};
-
 export default function RiderDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [tab, setTab] = useState<"available" | "active" | "history" | "earnings">("active");
+  const [tab, setTab] = useState<"active" | "available" | "history" | "earnings" | "profile">("active");
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -99,7 +88,22 @@ export default function RiderDashboard() {
     loyaltyPoints: number;
     completedDeliveries: number;
     cancelledDeliveries: number;
+    name?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+    vehicleType?: string;
   } | null>(null);
+
+  // Profile Edit State
+  const [profileForm, setProfileForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    vehicleType: "Motorcycle",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMsg, setProfileMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const StarRating = ({ rating }: { rating: number }) => {
     const fullStars = Math.floor(rating);
@@ -108,12 +112,12 @@ export default function RiderDashboard() {
       <div className="flex items-center gap-0.5 text-amber-500">
         {[...Array(fullStars)].map((_, i) => <Star key={i} size={14} fill="currentColor" />)}
         {hasHalfStar && <Star size={14} className="opacity-50" fill="currentColor" />}
-        {[...Array(5 - fullStars - (hasHalfStar ? 1 : 0))].map((_, i) => <Star key={i} size={14} className="text-slate-200" />)}
+        {[...Array(Math.max(0, 5 - fullStars - (hasHalfStar ? 1 : 0)))].map((_, i) => <Star key={i} size={14} className="text-slate-200" />)}
       </div>
     );
   };
 
-  // Update real-time location and patch it to server
+  // Update location
   useEffect(() => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
@@ -135,9 +139,9 @@ export default function RiderDashboard() {
     }
   }, [user]);
 
-  const fetchRiderData = useCallback(async (userId: string) => {
+  const fetchRiderData = useCallback(async (userId: string, silent = false) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await fetch(`/api/rider/orders?riderId=${userId}`);
       const data = await res.json();
       if (data.orders) {
@@ -145,11 +149,17 @@ export default function RiderDashboard() {
       }
       if (data.riderStats) {
         setRiderStats(data.riderStats);
+        setProfileForm({
+          name: data.riderStats.name || "",
+          phone: data.riderStats.phone || "",
+          address: data.riderStats.address || "",
+          vehicleType: data.riderStats.vehicleType || "Motorcycle",
+        });
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
@@ -158,7 +168,6 @@ export default function RiderDashboard() {
     if (!stored) { window.location.href = "/"; return; }
     try {
       const u = JSON.parse(stored);
-      // Strictly verify role for this dashboard
       if (u.role !== "rider") {
         if (u.role === "shop_owner") window.location.href = "/dashboard/shop";
         else if (u.role === "user") window.location.href = "/dashboard/user";
@@ -167,9 +176,15 @@ export default function RiderDashboard() {
       }
 
       setUser(u);
+      setProfileForm({
+        name: u.name || "",
+        phone: u.phone || "",
+        address: u.address || "",
+        vehicleType: u.vehicleType || "Motorcycle",
+      });
       fetchRiderData(u.id);
       
-      const interval = setInterval(() => fetchRiderData(u.id), 5000);
+      const interval = setInterval(() => fetchRiderData(u.id, true), 5000);
       return () => clearInterval(interval);
     } catch { window.location.href = "/"; }
   }, [fetchRiderData]);
@@ -192,7 +207,7 @@ export default function RiderDashboard() {
         body: JSON.stringify({ orderId, status, riderId: user?.id }),
       });
       if (res.ok) {
-        fetchRiderData(user!.id);
+        fetchRiderData(user!.id, true);
       }
     } catch (e) {
       console.error(e);
@@ -208,10 +223,67 @@ export default function RiderDashboard() {
       });
       if (res.ok) {
         setTab("active");
-        fetchRiderData(user!.id);
+        fetchRiderData(user!.id, true);
       }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+
+    // Client-side Validation
+    if (!profileForm.name || profileForm.name.trim().length < 2) {
+      setProfileMsg({ type: "error", text: "Name must be at least 2 characters long." });
+      return;
+    }
+
+    if (profileForm.phone && profileForm.phone.trim() !== "") {
+      const phoneRegex = /^[0-9+\-\s()]{7,15}$/;
+      if (!phoneRegex.test(profileForm.phone.trim())) {
+        setProfileMsg({ type: "error", text: "Please enter a valid phone number (7-15 digits)." });
+        return;
+      }
+    }
+
+    setProfileSaving(true);
+    setProfileMsg(null);
+
+    try {
+      const res = await fetch('/api/rider/profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          name: profileForm.name,
+          phone: profileForm.phone,
+          address: profileForm.address,
+          vehicleType: profileForm.vehicleType,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setProfileMsg({ type: "success", text: "Profile updated successfully!" });
+        
+        // Update user state and local storage
+        const updatedUser = { ...user, ...data.user };
+        setUser(updatedUser);
+        localStorage.setItem("medifind_user_rider", JSON.stringify(updatedUser));
+        localStorage.setItem("medifind_user", JSON.stringify(updatedUser));
+
+        fetchRiderData(user.id, true);
+        setTimeout(() => setProfileMsg(null), 4000);
+      } else {
+        setProfileMsg({ type: "error", text: data.error || "Failed to update profile." });
+      }
+    } catch (err) {
+      console.error(err);
+      setProfileMsg({ type: "error", text: "Network error while saving profile." });
+    } finally {
+      setProfileSaving(false);
     }
   };
 
@@ -240,6 +312,7 @@ export default function RiderDashboard() {
               { id: "available", label: "Available Tasks", icon: List },
               { id: "history", label: "History", icon: Package },
               { id: "earnings", label: "Earnings", icon: DollarSign },
+              { id: "profile", label: "Edit Profile", icon: UserCheck },
             ].map(item => (
               <button
                 key={item.id}
@@ -255,7 +328,7 @@ export default function RiderDashboard() {
         </div>
 
         <div className="mt-auto p-6 border-t border-slate-100">
-          <div className="flex items-center gap-3 mb-6 p-2 rounded-2xl bg-slate-50 border border-slate-100">
+          <div className="flex items-center gap-3 mb-4 p-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer" onClick={() => setTab("profile")}>
             <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-sky-600 font-black">
               {user?.name?.[0] || "R"}
             </div>
@@ -279,9 +352,10 @@ export default function RiderDashboard() {
               {tab === "available" && "Available Deliveries"}
               {tab === "history" && "Delivery History"}
               {tab === "earnings" && "Your Earnings"}
+              {tab === "profile" && "Rider Profile Settings 🚴"}
             </h1>
             <p className="text-slate-500 font-medium text-sm mt-1">
-              Manage your pharmacy medicine deliveries in real-time.
+              {tab === "profile" ? "Manage your rider profile information and vehicle details." : "Manage your pharmacy medicine deliveries in real-time."}
             </p>
           </div>
           {tab === "earnings" && (
@@ -296,7 +370,7 @@ export default function RiderDashboard() {
         </header>
 
         {/* Rider Performance Stats */}
-        {riderStats && (
+        {riderStats && tab !== "profile" && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 pt-4">
             <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex justify-between items-start mb-2">
@@ -335,11 +409,103 @@ export default function RiderDashboard() {
           </div>
         )}
 
-        {loading ? (
+        {/* PROFILE TAB */}
+        {tab === "profile" && (
+          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-2xl mt-4">
+            {profileMsg && (
+              <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-3 ${profileMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+                {profileMsg.type === "success" ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
+                <span>{profileMsg.text}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-6">
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Full Name</label>
+                <input
+                  type="text"
+                  required
+                  value={profileForm.name}
+                  onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
+                  placeholder="Enter your full name"
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Email Address (Read only)</label>
+                <input
+                  type="email"
+                  disabled
+                  value={user?.email || ""}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50 font-medium text-slate-400 text-sm cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Phone Number</label>
+                <div className="relative">
+                  <Phone size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <input
+                    type="tel"
+                    value={profileForm.phone}
+                    onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    placeholder="+91 9876543210"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Residential Address / Base Location</label>
+                <div className="relative">
+                  <Home size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <input
+                    type="text"
+                    value={profileForm.address}
+                    onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
+                    placeholder="Enter your city/address"
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Vehicle Type</label>
+                <div className="relative">
+                  <Truck size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <select
+                    value={profileForm.vehicleType}
+                    onChange={(e) => setProfileForm({ ...profileForm, vehicleType: e.target.value })}
+                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm bg-white"
+                  >
+                    <option value="Motorcycle">Motorcycle / Scooter</option>
+                    <option value="Bicycle">Bicycle</option>
+                    <option value="EV Scooter">EV Scooter</option>
+                    <option value="Car">Car / Van</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={profileSaving}
+                  className="bg-sky-600 hover:bg-sky-700 text-white px-8 py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-sky-200 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                >
+                  <Save size={16} />
+                  {profileSaving ? "Saving Changes..." : "Save Profile"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+
+        {loading && tab !== "profile" ? (
           <div className="flex items-center justify-center h-64">
             <Activity className="text-sky-500 animate-spin" size={40} />
           </div>
-        ) : (
+        ) : tab !== "profile" && (
           <div className="space-y-6">
             {tab === "active" && activeOrders.length === 0 && (
               <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
@@ -425,7 +591,7 @@ export default function RiderDashboard() {
                           <div className="flex justify-between items-center mt-1">
                             <div>
                                <p className="text-sm font-bold text-slate-800">Distance: {order.deliveryDistance?.toFixed(1) || "1.0"} km</p>
-                               <p className="text-[10px] text-slate-400 font-medium">Goal: Under {(order.deliveryDistance * 10 || 10).toFixed(0)} min for 5⭐</p>
+                               <p className="text-[10px] text-slate-400 font-medium">Goal: Under {((order.deliveryDistance || 1.0) * 10).toFixed(0)} min for 5⭐</p>
                             </div>
                             {order.deliveryStartTime && (
                               <div className="text-right">
@@ -485,7 +651,7 @@ export default function RiderDashboard() {
                       )}
                       {order.status === "REACHED_CUSTOMER" && (
                         <div className="sm:col-span-2 p-3 bg-green-50 text-green-700 rounded-xl text-center font-bold text-xs border border-green-100 border-dashed">
-                          Reached destination. Please wait for pharmacy to finalize delivery.
+                          Reached destination. Waiting for customer confirmation or shop delivery completion.
                         </div>
                       )}
                     </div>
@@ -494,13 +660,13 @@ export default function RiderDashboard() {
                   {tab === "active" && order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "FAILED" && (
                     <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
                       <button 
-                         onClick={() => { if(window.confirm("Cancel this delivery? Your rating will decrease.")) updateStatus(order.realId || order.id, "CANCELLED"); }}
+                         onClick={() => { if(window.confirm("Cancel this delivery assignment? The order will be returned to the available pool for reassignment.")) updateStatus(order.realId || order.id, "CANCELLED"); }}
                          className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-all"
                       >
                         Cancel Delivery
                       </button>
                       <button 
-                         onClick={() => { if(window.confirm("Mark as failed? This will affect your performance.")) updateStatus(order.realId || order.id, "FAILED"); }}
+                         onClick={() => { if(window.confirm("Mark as failed? This will affect your performance stats.")) updateStatus(order.realId || order.id, "FAILED"); }}
                          className="text-[10px] font-bold text-slate-400 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-all"
                       >
                         Mark as Failed
