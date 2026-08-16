@@ -1,0 +1,28 @@
+{
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@tailwindcss/postcss": "^4.2.1",
+    "@types/leaflet": "^1.9.21",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.577.0",
+    "next": "^16.1.6",
+    "postcss": "^8.5.8",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-leaflet": "^5.0.0",
+    "tailwindcss": "^4.2.1"
+  },
+  "devDependencies": {
+    "@prisma/client": "^6.2.1",
+    "@types/node": "^25.5.0",
+    "@types/react": "^19.2.14",
+    "prisma": "^6.2.1",
+    "tsx": "^4.21.0",
+    "typescript": "5.9.3"
+  }
+}

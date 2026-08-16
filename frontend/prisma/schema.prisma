@@ -1,0 +1,145 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Medicine {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  category    String?
+  indications String?     // e.g. "cough, fever, pain"
+  image       String?     // URL or path to image
+  inventory   Inventory[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Pharmacy {
+  id          String      @id @default(cuid())
+  name        String
+  location    String
+  latitude    Float?
+  longitude   Float?
+  rating      Float       @default(0)
+  distance    Float       @default(0) // Mock distance in km
+  phone       String?
+  openingTime String?     @default("9:00 AM")
+  closingTime String?     @default("9:00 PM")
+  isAvailable Boolean     @default(true)
+  inventory   Inventory[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Inventory {
+  id         String      @id @default(cuid())
+  medicine   Medicine    @relation(fields: [medicineId], references: [id])
+  medicineId String
+  pharmacy   Pharmacy    @relation(fields: [pharmacyId], references: [id])
+  pharmacyId String
+  price      Float
+  stock      Int         @default(0)
+  sold       Int         @default(0)
+  orderItems OrderItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([medicineId, pharmacyId])
+}
+
+model User {
+  id             String     @id @default(cuid())
+  name           String?
+  email          String     @unique
+  role           String     @default("user")   // "user" | "shop_owner" | "rider"
+  loyaltyPoints  Int        @default(0)
+  
+  // Rider-specific fields
+  riderRating          Float      @default(3.0)
+  riderLoyaltyPoints   Int        @default(0)
+  completedDeliveries  Int        @default(0)
+  cancelledDeliveries  Int        @default(0)
+  phone                String?
+  address              String?
+  vehicleType          String?    @default("Motorcycle")
+  
+  latitude       Float?     // For rider tracking
+  longitude      Float?     // For rider tracking
+  addresses      Address[]
+  orders         Order[]    @relation("UserOrders")
+  riderOrders    Order[]    @relation("RiderOrders")
+  healthLogs     HealthLog[]
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model Address {
+  id        String   @id @default(cuid())
+  label     String   // e.g. "Home", "Office"
+  address   String
+  latitude  Float?
+  longitude Float?
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+}
+
+model HealthLog {
+  id           String   @id @default(cuid())
+  user         User     @relation(fields: [userId], references: [id])
+  userId       String
+  symptoms     String   // "fever, headache"
+  prescription String?  // AI notes or suggested medicine names
+  createdAt    DateTime @default(now())
+}
+
+model Order {
+  id               String      @id @default(cuid())
+  user             User        @relation("UserOrders", fields: [userId], references: [id])
+  userId           String
+  rider            User?       @relation("RiderOrders", fields: [riderId], references: [id])
+  riderId          String?
+  cancelledRiderId String?     // Track rider who cancelled if any
+  totalAmount      Float
+  discountApplied  Float       @default(0)
+  loyaltyEarned    Int         @default(0)
+  isEmergency      Boolean     @default(false)
+  surgeFee         Float       @default(0)
+  driverEarnings   Float       @default(0)
+  status           String      @default("PENDING") // PENDING, PROCESSING, CONFIRMED, RIDER_ASSIGNED, RIDER_AT_PHARMACY, OUT_FOR_DELIVERY, DELIVERED
+  paymentMethod    String      @default("CASH_ON_DELIVERY") // ONLINE, CASH_ON_DELIVERY
+  deliveryAddress  String?
+  deliveryLat      Float?
+  deliveryLng      Float?
+  trackingNumber   String?
+  estimatedDelivery DateTime?
+  items            OrderItem[]
+  deliveryStartTime       DateTime?
+  deliveryEndTime         DateTime?
+  deliveryDurationMinutes Int?
+  deliveryDistance        Float?
+  ratingEarned            Float?
+  loyaltyPointsChange     Int?
+  createdAt        DateTime    @default(now())
+}
+
+model OrderItem {
+  id          String    @id @default(cuid())
+  order       Order     @relation(fields: [orderId], references: [id])
+  orderId     String
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  inventoryId String
+  quantity    Int
+  priceAtTime Float
+}
+
