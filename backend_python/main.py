@@ -38,60 +38,68 @@ def current_iso_time():
 # --- 1. AUTH ENDPOINTS ---
 @app.post("/api/auth/login")
 def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
-    email = req.email.lower().strip()
-    user = db.query(models.User).filter(models.User.email == email).first()
-    
-    if email == "demo@medstore.com":
-        if not user:
-            user = models.User(id=generate_cuid(), email=email, name="Demo Customer", role="user", createdAt=current_iso_time())
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "Demo Customer", "role": "user"}}
-    
-    if email == "shop@medstore.com":
-        if not user:
-            user = models.User(id=generate_cuid(), email=email, name="MediStore Pharmacy", role="shop_owner", createdAt=current_iso_time())
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "MediStore Pharmacy", "role": "shop_owner"}}
-    
-    if email == "rider@medstore.com":
-        if not user:
-            user = models.User(id=generate_cuid(), email=email, name="Rider Partner", role="rider", createdAt=current_iso_time())
-            db.add(user)
-            db.commit()
-            db.refresh(user)
-        return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "Rider Partner", "role": "rider"}}
-
-    if not user:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+    try:
+        email = req.email.lower().strip()
+        user = db.query(models.User).filter(models.User.email == email).first()
         
-    if user.password and req.password:
-        if user.password != hash_password(req.password):
+        if email == "demo@medstore.com":
+            if not user:
+                user = models.User(id=generate_cuid(), email=email, name="Demo Customer", role="user", createdAt=current_iso_time())
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "Demo Customer", "role": "user"}}
+        
+        if email == "shop@medstore.com":
+            if not user:
+                user = models.User(id=generate_cuid(), email=email, name="MediStore Pharmacy", role="shop_owner", createdAt=current_iso_time())
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "MediStore Pharmacy", "role": "shop_owner"}}
+        
+        if email == "rider@medstore.com":
+            if not user:
+                user = models.User(id=generate_cuid(), email=email, name="Rider Partner", role="rider", createdAt=current_iso_time())
+                db.add(user)
+                db.commit()
+                db.refresh(user)
+            return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "Rider Partner", "role": "rider"}}
+
+        if not user:
             from fastapi import HTTPException
             raise HTTPException(status_code=401, detail="Invalid email or password")
-    elif not user.password:
-        pass # Allow older users without password to login
-    
-    return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role}}
+            
+        if user.password and req.password:
+            if user.password != hash_password(req.password):
+                from fastapi import HTTPException
+                raise HTTPException(status_code=401, detail="Invalid email or password")
+        elif not user.password:
+            pass # Allow older users without password to login
+        
+        return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role}}
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"DEBUG ERROR: {str(e)}")
 
 @app.post("/api/auth/signup")
 def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
-    email = req.email.lower().strip()
-    existing = db.query(models.User).filter(models.User.email == email).first()
-    if existing:
+    try:
+        email = req.email.lower().strip()
+        existing = db.query(models.User).filter(models.User.email == email).first()
+        if existing:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=400, detail="Email already in use")
+        
+        hashed_pw = hash_password(req.password) if req.password else None
+        user = models.User(id=generate_cuid(), name=req.name, email=email, password=hashed_pw, role=req.role or "user", createdAt=current_iso_time())
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role}}
+    except Exception as e:
         from fastapi import HTTPException
-        raise HTTPException(status_code=400, detail="Email already in use")
-    
-    hashed_pw = hash_password(req.password) if req.password else None
-    user = models.User(id=generate_cuid(), name=req.name, email=email, password=hashed_pw, role=req.role or "user", createdAt=current_iso_time())
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role}}
+        raise HTTPException(status_code=400, detail=f"DEBUG ERROR: {str(e)}")
 
 # --- 2. USER ADDRESS ENDPOINTS ---
 @app.get("/api/user/address")
