@@ -24,7 +24,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ShopDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [tab, setTab] = useState<"orders" | "inventory" | "analytics" | "settings">("orders");
+  const [tab, setTab] = useState<"orders" | "inventory" | "ai-mappings" | "analytics" | "settings">("orders");
   const [orders, setOrders] = useState<any[]>([]);
   const [inventory, setInventory] = useState<any[]>([]);
   const [riders, setRiders] = useState<any[]>([]);
@@ -227,6 +227,48 @@ export default function ShopDashboard() {
     } catch {}
   };
 
+  const handleRemoveMedicine = async (medicineId: string) => {
+    if (!user) return;
+    if (!confirm("Are you sure you want to remove this product from inventory?")) return;
+    try {
+      const res = await fetch('/api/shop/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_medicine',
+          pharmacyId: user.id,
+          medicineId,
+        }),
+      });
+      if (res.ok) {
+        fetchShopData(user.id);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const toggleAvailability = async (medicineId: string, currentStock: number) => {
+    if (!user) return;
+    const newStock = currentStock > 0 ? 0 : 50;
+    try {
+      await fetch('/api/shop/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_stock',
+          pharmacyId: user.id,
+          medicineId,
+          stock: newStock,
+        }),
+      });
+      fetchShopData(user.id);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+
   const handleSaveSettings = async () => {
     if (!user) return;
     setSettingsSaving(true);
@@ -320,6 +362,7 @@ export default function ShopDashboard() {
           {[
             { id: "orders", label: "Orders", icon: ShoppingCart },
             { id: "inventory", label: "Inventory", icon: Package },
+            { id: "ai-mappings", label: "AI Mappings", icon: Activity },
             { id: "analytics", label: "Analytics", icon: BarChart3 },
             { id: "settings", label: "Store Settings", icon: Settings },
           ].map(t => (
@@ -491,6 +534,7 @@ export default function ShopDashboard() {
                       <th className="text-left px-6 py-4 font-black text-slate-400 text-xs uppercase tracking-wider">Category</th>
                       <th className="text-left px-6 py-4 font-black text-slate-400 text-xs uppercase tracking-wider">Price</th>
                       <th className="text-left px-6 py-4 font-black text-slate-400 text-xs uppercase tracking-wider">Stock</th>
+                      <th className="text-left px-6 py-4 font-black text-slate-400 text-xs uppercase tracking-wider">Availability</th>
                       <th className="text-left px-6 py-4 font-black text-slate-400 text-xs uppercase tracking-wider">Sold</th>
                       <th className="px-6 py-4"></th>
                     </tr>
@@ -522,23 +566,39 @@ export default function ShopDashboard() {
                               className="w-20 border border-emerald-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F]" />
                           ) : (
                             <span className={`font-bold ${med.stock < 20 ? "text-rose-600" : "text-slate-800"}`}>
-                              {med.stock} {med.stock < 20 && <span className="text-[10px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full ml-1 font-black">Low</span>}
+                              {med.stock} {med.stock < 20 && med.stock > 0 && <span className="text-[10px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full ml-1 font-black">Low</span>}
                             </span>
                           )}
                         </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => toggleAvailability(med.id, med.stock)}
+                            className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider transition-all ${med.stock > 0 ? "bg-[#E8F3ED] text-[#1E3A2F] border border-[#CDE3D5]" : "bg-rose-50 text-rose-600 border border-rose-200"}`}
+                          >
+                            {med.stock > 0 ? "Available" : "Out of Stock"}
+                          </button>
+                        </td>
                         <td className="px-6 py-4 text-slate-500 font-medium">{med.sold}</td>
                         <td className="px-6 py-4">
-                          {editingStock === med.id ? (
-                            <div className="flex gap-2">
-                              <button onClick={() => handleSaveStock(med.id)} className="bg-[#1E3A2F] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
-                              <button onClick={() => setEditingStock(null)} className="bg-slate-200 text-slate-600 text-xs px-3 py-1.5 rounded-lg font-bold">Cancel</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => { setEditingStock(med.id); setEditStock({ price: med.price.toString(), stock: med.stock.toString(), category: med.category || "" }); }}
-                              className="text-slate-400 hover:text-[#1E3A2F] p-1.5 rounded-lg hover:bg-[#E8F3ED] transition-colors">
-                              <Edit3 size={15} />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {editingStock === med.id ? (
+                              <div className="flex gap-2">
+                                <button onClick={() => handleSaveStock(med.id)} className="bg-[#1E3A2F] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
+                                <button onClick={() => setEditingStock(null)} className="bg-slate-200 text-slate-600 text-xs px-3 py-1.5 rounded-lg font-bold">Cancel</button>
+                              </div>
+                            ) : (
+                              <>
+                                <button onClick={() => { setEditingStock(med.id); setEditStock({ price: med.price.toString(), stock: med.stock.toString(), category: med.category || "" }); }}
+                                  className="text-slate-400 hover:text-[#1E3A2F] p-1.5 rounded-lg hover:bg-[#E8F3ED] transition-colors">
+                                  <Edit3 size={15} />
+                                </button>
+                                <button onClick={() => handleRemoveMedicine(med.id)}
+                                  className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors">
+                                  <X size={15} />
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -548,6 +608,82 @@ export default function ShopDashboard() {
             </div>
           </div>
         )}
+
+        {/* AI MAPPINGS TAB */}
+        {tab === "ai-mappings" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-serif font-bold text-slate-900 mb-1">AI Recommendation Mapping Review</h2>
+              <p className="text-slate-500 text-xs md:text-sm font-medium">Verify how your current stock matches the AI Consultant categories. Only OTC non-prescription items with positive stock are mapped.</p>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[
+                { label: "Mild Fever / Viral Symptoms", categories: ["Antipyretics", "Analgesics"], description: "Mapped to Antipyretics and Analgesics for temperature control and muscle aches." },
+                { label: "Mild Headache / Pain", categories: ["Analgesics"], description: "Mapped to Analgesics for pain relief." },
+                { label: "Common Cold & Flu", categories: ["Respiratory", "Analgesics", "Antipyretics"], description: "Multi-symptom mapping for cold/flu relief." },
+                { label: "Cough (Dry or Productive)", categories: ["Respiratory"], description: "Mapped to Respiratory/Cough category." },
+                { label: "Sore Throat / Irritation", categories: ["Respiratory", "Analgesics"], description: "Throat lozenges and oral antiseptics." },
+                { label: "Nasal Congestion", categories: ["Respiratory"], description: "Decongestants and antihistamines." },
+                { label: "Acidity / Heartburn / Indigestion", categories: ["Gastrointestinal"], description: "Mapped to Gastrointestinal antacids and digestive enzymes." },
+                { label: "Seasonal Allergies", categories: ["Respiratory"], description: "Mapped to antihistamines under Respiratory." },
+                { label: "Diarrhea", categories: ["Gastrointestinal"], description: "Oral rehydration salts and digestives." },
+                { label: "Skin Rash & Irritation", categories: ["Dermatology"], description: "Soothing creams and dermatology products." },
+              ].map((mapItem, idx) => {
+                // Find local pharmacy items in stock that match these categories
+                const matchingMeds = inventory.filter(med => 
+                  mapItem.categories.some(cat => med.category?.toLowerCase() === cat.toLowerCase()) &&
+                  med.stock > 0
+                );
+
+                return (
+                  <div key={idx} className="bg-white rounded-3xl border border-[#E2EFE7] p-6 shadow-sm flex flex-col justify-between">
+                    <div>
+                      <div className="flex justify-between items-start mb-3">
+                        <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                          <Activity size={16} className="text-[#1E3A2F]" /> {mapItem.label}
+                        </h3>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {mapItem.categories.map(c => (
+                            <span key={c} className="bg-[#E8F3ED] text-[#1E3A2F] text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider">{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                      <p className="text-slate-505 text-xs mb-4 leading-relaxed font-medium">{mapItem.description}</p>
+                      
+                      <div className="space-y-2.5">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Matched Active Stock ({matchingMeds.length})</p>
+                        {matchingMeds.length === 0 ? (
+                          <div className="p-3 bg-rose-50/50 border border-rose-100 rounded-2xl text-[11px] text-rose-600 font-medium italic">
+                            ⚠️ No available products match this category in your inventory. Customer AI check won't suggest your store for this symptom.
+                          </div>
+                        ) : (
+                          <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                            {matchingMeds.map(m => {
+                              // Prescription warnings
+                              const isRx = m.name.toLowerCase().includes("amoxicillin") || m.name.toLowerCase().includes("prednisone") || m.name.toLowerCase().includes("insulin");
+                              return (
+                                <div key={m.id} className="flex justify-between items-center bg-[#F6FAF7] border border-[#E2EFE7] rounded-xl p-2.5 text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-slate-800">{m.name}</span>
+                                    {isRx && <span className="bg-rose-50 text-rose-500 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Rx Only</span>}
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="font-black text-[#1E3A2F] mr-2">₹{m.price}</span>
+                                    <span className="text-slate-500 font-bold">{m.stock} left</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
         {/* ANALYTICS TAB */}
         {tab === "analytics" && (

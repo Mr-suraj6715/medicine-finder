@@ -343,6 +343,15 @@ export default function Home() {
   const [aiRecommendation, setAiRecommendation] = useState<any[]>([]);
   const [isAnalyzingSymptoms, setIsAnalyzingSymptoms] = useState(false);
   const [symptomMessage, setSymptomMessage] = useState("");
+  const [safetyAge, setSafetyAge] = useState<string>("");
+  const [safetyAllergies, setSafetyAllergies] = useState<string>("");
+  const [safetyPregnancy, setSafetyPregnancy] = useState<boolean>(false);
+  const [aiConsultResult, setAiConsultResult] = useState<any>(null);
+  const [safetyQuestions, setSafetyQuestions] = useState<any>(null);
+  const [escalatedRole, setEscalatedRole] = useState<"pharmacist" | "doctor" | null>(null);
+  const [escalationMessage, setEscalationMessage] = useState<string>("");
+  const [pharmacistChat, setPharmacistChat] = useState<{sender: "user" | "pharmacist", text: string}[]>([]);
+  const [pharmacistInput, setPharmacistInput] = useState<string>("");
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isEmergencyMode, setIsEmergencyMode] = useState(false);
@@ -565,22 +574,47 @@ export default function Home() {
     } catch {} finally { setIsOrdering(false); }
   };
 
-  const handleSymptomCheck = async () => {
+  const handleSymptomCheck = async (overrideSafetyInfo?: any) => {
     if (!userSymptoms.trim()) return;
     setIsAnalyzingSymptoms(true);
     setSymptomMessage("");
     setAiRecommendation([]);
+    setEscalatedRole(null);
+    setEscalationMessage("");
+
+    // Build safety info payload
+    const sInfo: any = {};
+    if (overrideSafetyInfo) {
+      Object.assign(sInfo, overrideSafetyInfo);
+    } else {
+      if (safetyAge) sInfo.age = parseInt(safetyAge);
+      if (safetyAllergies) sInfo.allergies = safetyAllergies;
+      sInfo.pregnancy = safetyPregnancy;
+    }
+
     try {
       const res = await fetch("/api/ai-consultant", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userEmail: user?.email || "user@example.com", symptoms: userSymptoms }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userEmail: user?.email || "user@example.com",
+          symptoms: userSymptoms,
+          safetyInfo: sInfo
+        }),
       });
       const data = await res.json();
+      setAiConsultResult(data);
+      if (data.status === "NEEDS_SAFETY_INFO") {
+        setSafetyQuestions(data.questions);
+      } else {
+        setSafetyQuestions(null);
+      }
       if (data.advice) {
         setSymptomMessage(data.advice);
-        if (data.suggestedMedicines) {
-          setAiRecommendation(data.suggestedMedicines);
-        }
+      }
+      // Keep legacy fallback compatibility
+      if (data.suggestedProducts) {
+        setAiRecommendation(data.suggestedProducts.map((p: any) => p.name));
       }
     } catch (err) {
       console.error("AI consult failed:", err);
@@ -588,6 +622,31 @@ export default function Home() {
       setIsAnalyzingSymptoms(false);
     }
   };
+
+  const sendPharmacistMessage = () => {
+    if (!pharmacistInput.trim()) return;
+    const userMsg = pharmacistInput;
+    setPharmacistChat(prev => [...prev, { sender: "user", text: userMsg }]);
+    setPharmacistInput("");
+
+    setTimeout(() => {
+      let reply = "I understand. Based on these symptoms, I recommend taking plenty of fluids and rest. Let me know if you have any existing allergies before taking any medications.";
+      const msgLower = userMsg.toLowerCase();
+      if (msgLower.includes("dose") || msgLower.includes("how much") || msgLower.includes("take")) {
+        reply = "For general OTC medications like Paracetamol 500mg, the standard dose for adults is 1 tablet every 4-6 hours as needed, not exceeding 4 tablets in 24 hours. Always read the packaging label and take after meals.";
+      } else if (msgLower.includes("side effect") || msgLower.includes("harm") || msgLower.includes("safe")) {
+        reply = "Common side effects are mild, but if you experience any swelling, skin rash, or breathing difficulties, stop taking the medicine immediately and seek emergency medical help.";
+      } else if (msgLower.includes("child") || msgLower.includes("baby") || msgLower.includes("kid")) {
+        reply = "For children, dosing must be carefully calculated based on weight and age. Please consult a pediatrician before giving any adult OTC medicine to a child.";
+      } else if (msgLower.includes("allergy") || msgLower.includes("allergic")) {
+        reply = "If you have an allergy to aspirin or NSAIDs, avoid Ibuprofen or Diclofenac. Stick to Paracetamol or contact your doctor for an alternative prescription.";
+      } else if (msgLower.includes("thank") || msgLower.includes("ok") || msgLower.includes("yes")) {
+        reply = "You're welcome! Stay safe and feel free to ask any other questions. Your wellness is our priority.";
+      }
+      setPharmacistChat(prev => [...prev, { sender: "pharmacist", text: reply }]);
+    }, 800);
+  };
+
 
   useEffect(() => {
     const handleActiveOrder = async () => {
@@ -907,180 +966,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ── 8 SOFT MINT PASTEL CATEGORY CARDS (Exact Match to Screenshot) ── */}
-      <section id="categories" className="max-w-7xl mx-auto px-6 md:px-10 pb-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          
-          {/* Card 1: Find medicines (Popular) */}
-          <div 
-            onClick={() => { setSearchInput("Paracetamol"); handleSearch("Paracetamol"); }}
-            className="bg-[#EBF4EE] hover:bg-[#E2EFE7] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[210px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-xl font-medium text-slate-900 tracking-tight">
-                Find <span className="font-bold text-[#1E3A2F]">medicines</span>
-              </h3>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold bg-[#1E3A2F] text-white px-2.5 py-1 rounded-full uppercase tracking-tighter">Popular</span>
-                <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-            <div className="flex justify-center items-center my-auto pt-2">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-400 p-0.5 shadow-xl rotate-12 group-hover:scale-105 transition-transform flex items-center justify-center text-white font-bold text-xs text-center">
-                <Pill size={36} />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 2: Upload prescription */}
-          <div 
-            onClick={() => { setSearchInput("Amoxicillin"); handleSearch("Amoxicillin"); }}
-            className="bg-[#EBF4EE] hover:bg-[#E2EFE7] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[210px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-xl font-medium text-slate-900 tracking-tight">
-                Upload <span className="font-bold text-[#2D4A3E]">prescription</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-center items-center my-auto pt-2">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/90 shadow-xl group-hover:scale-105 transition-transform flex items-center justify-center text-white">
-                <Stethoscope size={32} />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 3: Consult AI Doctor */}
-          <div 
-            onClick={() => document.getElementById("ai")?.scrollIntoView({ behavior: "smooth" })}
-            className="bg-[#EBF4EE] hover:bg-[#E2EFE7] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[210px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-xl font-medium text-slate-900 tracking-tight">
-                Consult <span className="font-bold text-[#8C6D58]">AI doctor</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-center items-center my-auto pt-2">
-              <div className="w-16 h-16 rounded-full bg-[#D8B49C] shadow-lg group-hover:scale-105 transition-transform flex items-center justify-center text-white font-black text-sm">
-                <Brain size={30} />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 4: Emergency delivery */}
-          <div 
-            onClick={() => setShowEmergencyModal(true)}
-            className="bg-[#EBF4EE] hover:bg-[#E2EFE7] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[210px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-xl font-medium text-slate-900 tracking-tight">
-                Emergency <span className="font-bold text-[#D9534F]">delivery</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-center items-center my-auto pt-2">
-              <div className="w-16 h-16 rounded-full bg-rose-500 shadow-xl group-hover:scale-105 transition-transform flex items-center justify-center text-white">
-                <Activity size={32} className="animate-pulse" />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 5: Pain & Fever */}
-          <div 
-            onClick={() => { setSearchInput("Dolo 650"); handleSearch("Dolo 650"); }}
-            className="bg-[#F2F8F4] hover:bg-[#E8F3ED] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[180px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-lg font-medium text-slate-900 tracking-tight">
-                Reduce <span className="font-bold text-[#2E6B5E]">fever & pain</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-end items-center pt-2">
-              <div className="w-16 h-10 rounded-full bg-sky-500 shadow-md group-hover:scale-105 transition-transform flex items-center justify-center text-white font-bold text-xs">
-                650mg
-              </div>
-            </div>
-          </div>
-
-          {/* Card 6: Skin & Wellness */}
-          <div 
-            onClick={() => { setSearchInput("Vitamin C"); handleSearch("Vitamin C"); }}
-            className="bg-[#F2F8F4] hover:bg-[#E8F3ED] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[180px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-lg font-medium text-slate-900 tracking-tight">
-                Get glowing <span className="font-bold text-slate-700">wellness</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-end items-center pt-2">
-              <div className="w-12 h-12 rounded-xl bg-slate-800 shadow-md group-hover:scale-105 transition-transform flex items-center justify-center text-white">
-                <Gift size={22} />
-              </div>
-            </div>
-          </div>
-
-          {/* Card 7: Health Logs */}
-          <div 
-            onClick={() => { if (user) window.location.href = "/dashboard/user"; else setShowLogin(true); }}
-            className="bg-[#F2F8F4] hover:bg-[#E8F3ED] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[180px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-lg font-medium text-slate-900 tracking-tight">
-                Control your <span className="font-bold text-[#2D4A3E]">health</span>
-              </h3>
-              <ChevronRight size={18} className="text-slate-600 group-hover:translate-x-1 transition-transform" />
-            </div>
-            <div className="flex justify-end items-center pt-2">
-              <div className="w-14 h-10 rounded-lg bg-teal-600 shadow-md group-hover:scale-105 transition-transform flex items-center justify-center text-white font-black text-xs">
-                LOGS
-              </div>
-            </div>
-          </div>
-
-          {/* Card 8: Browse all treatments */}
-          <div 
-            onClick={() => handleSearch("")}
-            className="bg-[#F2F8F4] hover:bg-[#E8F3ED] rounded-[28px] p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-md cursor-pointer group flex flex-col justify-between h-[180px] relative overflow-hidden"
-          >
-            <div className="flex justify-between items-start">
-              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                Browse all treatments
-              </h3>
-              <Search size={20} className="text-slate-700 group-hover:scale-110 transition-transform" />
-            </div>
-            <div className="flex justify-end items-center pt-2">
-              <div className="w-10 h-10 rounded-full bg-[#1E3A2F] text-white flex items-center justify-center font-bold">
-                →
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </section>
-
-      {/* ── DUSTY SLATE BLUE BANNER ("Care that evolves with you") ── */}
-      <section className="max-w-7xl mx-auto px-6 md:px-10 pb-16">
-        <div className="bg-[#6B8C9F] rounded-[36px] p-10 md:p-16 text-white text-center relative overflow-hidden shadow-xl">
-          <span className="bg-[#E76F51] text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest inline-block mb-4">
-            Hyperlocal Pharmacy Delivery | 24/7
-          </span>
-          <h2 className="text-4xl md:text-6xl font-serif tracking-tight mb-4 leading-tight">
-            Care that evolves with you
-          </h2>
-          <p className="text-slate-100 max-w-lg mx-auto text-base md:text-lg font-medium mb-8">
-            Access genuine medicines, transparent pricing, and instant rider delivery from verified neighborhood pharmacies.
-          </p>
-          <button 
-            onClick={() => document.getElementById("search")?.scrollIntoView({ behavior: "smooth" })}
-            className="bg-white text-[#1E3A2F] hover:bg-slate-100 px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg transition-all active:scale-95"
-          >
-            Start Your Order
-          </button>
-        </div>
-      </section>
 
       {/* ── SEARCH RESULTS & BEST PRICE SECTION ── */}
       <main className="max-w-7xl mx-auto px-6 md:px-10 pb-24 space-y-12">
@@ -1209,6 +1094,376 @@ export default function Home() {
           )}
         </div>
 
+        {/* ── CARE BANNER ── */}
+        <div className="bg-[#6B8C9F] rounded-[36px] p-10 md:p-16 text-white text-center relative overflow-hidden shadow-xl">
+          <span className="bg-[#E76F51] text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest inline-block mb-4">
+            Hyperlocal Pharmacy Delivery | 24/7
+          </span>
+          <h2 className="text-4xl md:text-6xl font-serif tracking-tight mb-4 leading-tight">
+            Care that evolves with you
+          </h2>
+          <p className="text-slate-100 max-w-lg mx-auto text-base md:text-lg font-medium mb-8">
+            Access genuine medicines, transparent pricing, and instant rider delivery from verified neighborhood pharmacies.
+          </p>
+          <button
+            onClick={() => document.getElementById("search")?.scrollIntoView({ behavior: "smooth" })}
+            className="bg-white text-[#1E3A2F] hover:bg-slate-100 px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg transition-all active:scale-95"
+          >
+            Start Your Order
+          </button>
+        </div>
+
+        {/* ── AI HEALTH ASSISTANT ── */}
+        <div id="ai" className="bg-[#1D352C] rounded-[36px] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl border border-emerald-900/30">
+          <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
+          
+          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
+            {/* Left Side: Input & Safety Questions */}
+            <div className="lg:col-span-5 space-y-6">
+              <div>
+                <div className="inline-flex items-center gap-2 bg-[#2D4D3E] text-emerald-300 px-3.5 py-1.5 rounded-full text-xs font-black tracking-wider uppercase mb-4">
+                  <Sparkles size={13} className="animate-pulse" /> Safety-First Guidance
+                </div>
+                <h2 className="text-3xl md:text-4xl font-serif mb-3 tracking-tight text-white">
+                  Smart Health <span className="text-emerald-300 font-sans font-bold">Assistant</span>
+                </h2>
+                <p className="text-emerald-100/70 text-xs md:text-sm leading-relaxed font-medium">
+                  Provide your symptoms to check for possible minor conditions, screen for safety risks, and search local store inventory for matching OTC products.
+                </p>
+              </div>
+
+              {/* Symptom Input Textarea */}
+              <div className="space-y-2">
+                <label className="block text-[10px] font-black text-emerald-300 uppercase tracking-widest">Describe Your Symptoms</label>
+                <textarea
+                  value={userSymptoms}
+                  onChange={e => setUserSymptoms(e.target.value)}
+                  placeholder="E.g., I have a mild headache, runny nose, and low fever since yesterday..."
+                  className="w-full bg-[#14261F] border border-emerald-800/40 rounded-2xl p-4 text-white placeholder-emerald-100/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[100px] text-xs resize-none transition-all"
+                />
+              </div>
+
+              {/* Safety Questionnaire if needed */}
+              {safetyQuestions && (
+                <div className="bg-[#14261F] border border-emerald-800/40 rounded-2xl p-5 space-y-4 animate-in slide-in-from-bottom duration-300">
+                  <h4 className="text-xs font-black text-emerald-300 uppercase tracking-widest flex items-center gap-2">
+                    <ShieldCheck size={14} /> Medical Safety Check
+                  </h4>
+                  <p className="text-slate-300 text-[11px]">To safely check OTC guidance, we require the following info:</p>
+                  
+                  {safetyQuestions.age && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-bold">{safetyQuestions.age}</label>
+                      <input
+                        type="number"
+                        placeholder="Age in years"
+                        value={safetyAge}
+                        onChange={e => setSafetyAge(e.target.value)}
+                        className="w-full bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+                  )}
+
+                  {safetyQuestions.allergies && (
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-slate-400 font-bold">{safetyQuestions.allergies}</label>
+                      <input
+                        type="text"
+                        placeholder="e.g. none, penicillin, aspirin"
+                        value={safetyAllergies}
+                        onChange={e => setSafetyAllergies(e.target.value)}
+                        className="w-full bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2.5 pt-1">
+                    <input
+                      type="checkbox"
+                      id="preg_preg"
+                      checked={safetyPregnancy}
+                      onChange={e => setSafetyPregnancy(e.target.checked)}
+                      className="rounded bg-white/5 border-emerald-800/40 text-emerald-500 focus:ring-0"
+                    />
+                    <label htmlFor="preg_preg" className="text-[11px] text-slate-300 font-medium">Pregnant or breastfeeding?</label>
+                  </div>
+
+                  <button
+                    onClick={() => handleSymptomCheck()}
+                    className="w-full bg-emerald-400 hover:bg-emerald-300 text-[#1D352C] font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all"
+                  >
+                    Confirm & Analyze
+                  </button>
+                </div>
+              )}
+
+              {/* Main Guidance Action */}
+              {!safetyQuestions && (
+                <button
+                  onClick={() => handleSymptomCheck()}
+                  disabled={isAnalyzingSymptoms || !userSymptoms.trim()}
+                  className="w-full bg-white hover:bg-emerald-300 text-[#1E3A2F] hover:text-[#1E3A2F] py-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-3 disabled:opacity-30 shadow-lg"
+                >
+                  {isAnalyzingSymptoms ? (
+                    <><Brain className="animate-pulse" size={16} /> Analyzing Symptoms...</>
+                  ) : (
+                    <><Sparkles size={16} /> Get Safety Guidance</>
+                  )}
+                </button>
+              )}
+
+              {/* Escalation Options */}
+              {aiConsultResult && (
+                <div className="pt-2 border-t border-emerald-800/30 flex gap-3">
+                  <button
+                    onClick={() => {
+                      setEscalatedRole("pharmacist");
+                      setPharmacistChat([
+                        { sender: "pharmacist", text: "Hello! I am Dr. Roy, your virtual pharmacist. How can I assist you with your health query today?" }
+                      ]);
+                    }}
+                    className="flex-1 bg-white/5 border border-emerald-800/40 hover:bg-white/10 text-white rounded-xl py-3 text-xs font-bold text-center transition-colors"
+                  >
+                    Talk to Pharmacist
+                  </button>
+                  <button
+                    onClick={() => setEscalatedRole("doctor")}
+                    className="flex-1 bg-[#28483B] hover:bg-[#345d4d] text-emerald-300 rounded-xl py-3 text-xs font-bold text-center transition-colors"
+                  >
+                    Consult a Doctor
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Right Side: Response Feed, Escalation Chat, Booking Calendar */}
+            <div className="lg:col-span-7 bg-[#14261F] border border-emerald-800/20 rounded-[28px] p-6 min-h-[350px] flex flex-col">
+              
+              {/* Case 1: Simulated Chat with Pharmacist */}
+              {escalatedRole === "pharmacist" && (
+                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-300">
+                  <div className="flex justify-between items-center pb-3 border-b border-emerald-800/30 mb-4">
+                    <div>
+                      <h4 className="font-bold text-xs text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider"><Activity size={12} /> Pharmacist Desk (Live)</h4>
+                      <p className="text-[9px] text-slate-400">Dr. Roy, Pharmacist • Registered MH/MUM/1042</p>
+                    </div>
+                    <button onClick={() => setEscalatedRole(null)} className="text-slate-400 hover:text-white p-1"><X size={16} /></button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[220px] text-xs">
+                    {pharmacistChat.map((msg, i) => (
+                      <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
+                        <div className={`p-3 rounded-2xl max-w-[85%] leading-relaxed ${msg.sender === "user" ? "bg-emerald-600 text-white" : "bg-white/5 border border-emerald-850 text-slate-100"}`}>
+                          {msg.text}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-emerald-800/30 flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Ask about side effects, dosing instructions..."
+                      value={pharmacistInput}
+                      onChange={e => setPharmacistInput(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && sendPharmacistMessage()}
+                      className="flex-1 bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
+                    />
+                    <button
+                      onClick={sendPharmacistMessage}
+                      className="bg-emerald-400 hover:bg-emerald-300 text-black px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                    >
+                      Send
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Case 2: Simulated Doctor Consultation Booking */}
+              {escalatedRole === "doctor" && (
+                <div className="flex-1 flex flex-col justify-between h-full animate-in fade-in duration-300">
+                  <div>
+                    <div className="flex justify-between items-center pb-3 border-b border-emerald-800/30 mb-4">
+                      <div>
+                        <h4 className="font-bold text-xs text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider"><Stethoscope size={12} /> Book Doctor Consultation</h4>
+                        <p className="text-[9px] text-slate-400">Instantly schedule a 1-on-1 virtual medical consult</p>
+                      </div>
+                      <button onClick={() => setEscalatedRole(null)} className="text-slate-400 hover:text-white p-1"><X size={16} /></button>
+                    </div>
+                    {escalationMessage ? (
+                      <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-2xl p-6 text-center space-y-3">
+                        <CheckCircle size={32} className="text-emerald-300 mx-auto" />
+                        <p className="text-sm font-bold text-white">{escalationMessage}</p>
+                        <p className="text-xs text-slate-400">Our medical coordinator will send a join link to your email address before your appointment time.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Today</p>
+                            <p className="text-sm font-bold text-white">4:30 PM</p>
+                          </div>
+                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Today</p>
+                            <p className="text-sm font-bold text-white">6:00 PM</p>
+                          </div>
+                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Tomorrow</p>
+                            <p className="text-sm font-bold text-white">10:30 AM</p>
+                          </div>
+                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
+                            <p className="text-[9px] font-black text-slate-400 uppercase">Tomorrow</p>
+                            <p className="text-sm font-bold text-white">2:00 PM</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {!escalationMessage && (
+                    <button
+                      onClick={() => setEscalationMessage("Appointment Confirmed! Teleconsultation booked for Today at 4:30 PM.")}
+                      className="w-full bg-emerald-400 hover:bg-emerald-300 text-black py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
+                    >
+                      Book Teleconsultation
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Case 3: Display normal AI Result */}
+              {!escalatedRole && (
+                <div className="flex-1 flex flex-col justify-between">
+                  {aiConsultResult ? (
+                    <div className="space-y-4">
+                      
+                      {/* Sub-case 3a: RED FLAG detected */}
+                      {aiConsultResult.status === "RED_FLAG" && (
+                        <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-5 space-y-3 animate-in fade-in duration-500">
+                          <h3 className="text-xs font-black text-rose-400 flex items-center gap-1.5 uppercase tracking-widest">
+                            🚨 Emergency Alert: Red Flags Found
+                          </h3>
+                          <p className="text-rose-100 text-xs font-semibold leading-relaxed">
+                            {aiConsultResult.message}
+                          </p>
+                          <div className="bg-black/20 p-4 rounded-xl text-[11px] text-rose-200 leading-relaxed italic">
+                            {aiConsultResult.advice}
+                          </div>
+                          <div className="bg-rose-900/40 border border-rose-700/50 p-3 rounded-xl text-xs text-white font-bold">
+                            👉 {aiConsultResult.urgentAction}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sub-case 3b: NEEDS SAFETY DETAILS */}
+                      {aiConsultResult.status === "NEEDS_SAFETY_INFO" && (
+                        <div className="h-full flex flex-col items-center justify-center text-center py-10 space-y-3 animate-in fade-in">
+                          <ShieldCheck size={40} className="text-emerald-400 opacity-60" />
+                          <p className="text-sm font-bold text-white">{aiConsultResult.message}</p>
+                          <p className="text-xs text-slate-400 max-w-sm">Please answer the safety questions in the left panel to receive matched medicine options.</p>
+                        </div>
+                      )}
+
+                      {/* Sub-case 3c: NO MATCH */}
+                      {aiConsultResult.status === "NO_MATCH" && (
+                        <div className="space-y-3 animate-in fade-in">
+                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-4 text-xs text-slate-300">
+                            {aiConsultResult.message}
+                          </div>
+                          <p className="text-xs text-slate-400">{aiConsultResult.advice}</p>
+                        </div>
+                      )}
+
+                      {/* Sub-case 3d: OK - MATCH SUCCESS */}
+                      {aiConsultResult.status === "OK" && (
+                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar animate-in fade-in duration-500">
+                          
+                          {/* Match Header / Condition Advice */}
+                          {aiConsultResult.conditions.map((c: any) => (
+                            <div key={c.conditionKey} className="bg-white/5 border border-emerald-800/20 rounded-2xl p-4 space-y-2">
+                              <h4 className="text-xs font-black text-emerald-300 uppercase tracking-widest flex items-center gap-1.5">
+                                <Check size={12} /> {c.conditionLabel} Matches
+                              </h4>
+                              <p className="text-[11px] text-slate-300 leading-relaxed font-medium">{c.description}</p>
+                              <div className="text-[10px] text-slate-400 leading-relaxed"><span className="font-bold text-slate-300">Self-Care:</span> {c.selfCareAdvice}</div>
+                              {c.warning && (
+                                <div className="text-[9px] text-amber-300/90 leading-relaxed mt-1 font-bold">⚠️ Warning: {c.warning}</div>
+                              )}
+                            </div>
+                          ))}
+
+                          {/* Matching Products */}
+                          <div className="space-y-2.5">
+                            <h4 className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mt-3">Matched OTC Inventory Products</h4>
+                            {aiConsultResult.suggestedProducts.length === 0 ? (
+                              <p className="text-xs text-slate-500 italic">No matching OTC inventory products are in stock right now.</p>
+                            ) : (
+                              aiConsultResult.suggestedProducts.map((p: any) => (
+                                <div key={p.medicineId} className="bg-[#1C2F27] hover:bg-[#253D33] border border-emerald-800/20 rounded-2xl p-4 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-bold text-xs text-white uppercase tracking-tight">{p.name}</span>
+                                      <span className="bg-emerald-950 text-emerald-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">OTC</span>
+                                    </div>
+                                    <p className="text-[10px] text-slate-400">{p.generalUse}</p>
+                                    
+                                    {/* Pharmacy details dropdown/label */}
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                      <span className="text-[9px] font-black text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded">In Stock</span>
+                                      <span className="text-[9px] font-medium text-slate-400">Available at {p.availableIn} stores</span>
+                                    </div>
+
+                                    {/* Warnings */}
+                                    {p.warnings && p.warnings.map((w: string, idx: number) => (
+                                      <p key={idx} className="text-[9px] font-black text-rose-400 mt-1 leading-tight">{w}</p>
+                                    ))}
+                                  </div>
+
+                                  <div className="flex flex-row sm:flex-col items-end gap-2 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
+                                    <div className="text-right">
+                                      <p className="text-[9px] font-bold text-slate-400">Starting From</p>
+                                      <p className="text-sm font-black text-emerald-300">₹{p.startingPrice.toFixed(2)}</p>
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        // Update state with medicine selection to load live local map details
+                                        const mockMed = { id: p.medicineId, name: p.name, description: p.generalUse, category: p.category };
+                                        setSelectedMedicine(mockMed);
+                                        fetchInventory(p.medicineId);
+                                        document.getElementById("nearby")?.scrollIntoView({ behavior: "smooth" });
+                                      }}
+                                      className="bg-emerald-400 hover:bg-emerald-300 text-black text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider flex items-center gap-0.5"
+                                    >
+                                      Map & Route <ArrowRight size={10} />
+                                    </button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+
+                          {/* Safe Usage Disclaimer */}
+                          <div className="text-[9px] text-slate-400 bg-black/10 rounded-xl p-3 border border-emerald-900/30 leading-relaxed">
+                            {aiConsultResult.disclaimer}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8 border border-white/5 rounded-3xl bg-white/5 my-auto">
+                      <Brain size={40} className="text-emerald-300/30 mb-3" />
+                      <p className="text-emerald-100/60 text-xs font-semibold">Enter your symptoms on the left to receive safe, inventory-matched health guidance.</p>
+                    </div>
+                  )}
+
+                  {/* Warning footer */}
+                  {aiConsultResult && (
+                    <div className="pt-3 border-t border-emerald-800/30 text-[9px] text-slate-450 italic leading-snug flex items-center gap-1">
+                      <span>⚠️ {aiConsultResult.advice}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+        </div>
+
         {/* ── NEARBY PHARMACIES MAP & ROUTING ── */}
         <div id="nearby" className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-6">
           <div className="lg:col-span-2 space-y-4">
@@ -1290,58 +1545,6 @@ export default function Home() {
                 </div>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* ── AI HEALTH ASSISTANT ── */}
-        <div id="ai" className="bg-[#1E3A2F] rounded-[36px] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl">
-          <div className="relative z-10 grid grid-cols-1 xl:grid-cols-2 gap-10">
-            <div>
-              <div className="inline-flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full text-emerald-300 text-xs font-black tracking-widest uppercase mb-5"><Sparkles size={13} /> AI-Powered</div>
-              <h2 className="text-3xl md:text-5xl font-serif mb-4 tracking-tight">Smart Health <span className="text-emerald-300 font-sans font-bold">Assistant</span></h2>
-              <p className="text-emerald-100/80 mb-7 text-sm leading-relaxed">Describe your symptoms and get AI-powered medicine suggestions from our verified database.</p>
-              <textarea
-                value={userSymptoms}
-                onChange={e => setUserSymptoms(e.target.value)}
-                placeholder="E.g. I have a dry cough, sore throat, and slight fever..."
-                className="w-full bg-white/10 border border-white/20 rounded-2xl p-5 text-white placeholder-emerald-100/50 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[120px] text-sm resize-none mb-4"
-              />
-              <button onClick={handleSymptomCheck} disabled={isAnalyzingSymptoms || !userSymptoms.trim()}
-                className="w-full bg-white text-[#1E3A2F] hover:bg-emerald-300 hover:text-[#1E3A2F] py-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-3 disabled:opacity-50 shadow-lg">
-                {isAnalyzingSymptoms ? <><Brain className="animate-pulse" size={18} /> Analyzing…</> : <><Sparkles size={18} /> Consult AI Assistant</>}
-              </button>
-            </div>
-            <div>
-              {symptomMessage || aiRecommendation.length > 0 ? (
-                <div className="space-y-6">
-                  {symptomMessage && (
-                    <div className="animate-in fade-in duration-500">
-                      <h3 className="text-xs font-black mb-3 flex items-center gap-2 text-emerald-300 uppercase tracking-widest">AI Consultant Answer</h3>
-                      <div className="bg-white/10 border border-white/20 p-5 rounded-2xl text-slate-100 text-sm leading-relaxed italic shadow-inner">
-                        "{symptomMessage}"
-                      </div>
-                    </div>
-                  )}
-
-                  {aiRecommendation.length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="text-xs font-black text-emerald-300 uppercase tracking-widest">Suggested Medicines</h4>
-                      {aiRecommendation.map((medName, idx) => (
-                        <div key={idx} className="bg-white/10 p-4 rounded-2xl flex items-center justify-between">
-                          <span className="font-bold text-sm text-white">{medName}</span>
-                          <button onClick={() => { setSearchInput(medName); handleSearch(medName); }} className="text-xs font-bold text-emerald-300 underline">Search</button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-center p-8 border border-white/10 rounded-3xl bg-white/5">
-                  <Brain size={48} className="text-emerald-300/40 mb-4" />
-                  <p className="text-emerald-100/70 text-sm">Enter your symptoms on the left to receive AI recommendations.</p>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </main>
