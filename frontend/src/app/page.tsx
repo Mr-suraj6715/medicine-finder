@@ -1462,6 +1462,7 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </div>
         </div>
 
         {/* ── NEARBY PHARMACIES MAP & ROUTING ── */}

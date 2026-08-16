@@ -684,6 +684,7 @@ export default function ShopDashboard() {
               })}
             </div>
           </div>
+        )}
 
         {/* ANALYTICS TAB */}
         {tab === "analytics" && (
