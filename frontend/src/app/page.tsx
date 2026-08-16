@@ -205,12 +205,7 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
             </button>
           ))}
         </div>
-        <div className="bg-[#F2F8F4] border border-[#D5E6DC] rounded-2xl p-4 mb-6 text-sm text-[#1E3A2F]">
-          <p className="font-bold mb-1">Demo Credentials:</p>
-          <p>👤 User: <code className="bg-[#E2EFE7] px-1 rounded">demo@medstore.com</code> / <code className="bg-[#E2EFE7] px-1 rounded">demo123</code></p>
-          <p className="mt-1">🏪 Shop Owner: <code className="bg-[#E2EFE7] px-1 rounded">shop@medstore.com</code> / <code className="bg-[#E2EFE7] px-1 rounded">shop123</code></p>
-          <p className="mt-1">🚴 Rider: <code className="bg-[#E2EFE7] px-1 rounded">rider@medstore.com</code> / <code className="bg-[#E2EFE7] px-1 rounded">rider123</code></p>
-        </div>
+
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-medium">{error}</div>}
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
