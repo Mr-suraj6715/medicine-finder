@@ -157,8 +157,8 @@ function LeafletMap({
 
 // ─── Login Modal ──────────────────────────────────────────────────
 function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onSuccess: (u: AuthUser) => void; onSwitch: () => void }) {
-  const [email, setEmail] = useState("demo@medstore.com");
-  const [password, setPassword] = useState("demo123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [role, setRole] = useState<"user" | "shop_owner" | "rider">("user");
   const [loading, setLoading] = useState(false);
