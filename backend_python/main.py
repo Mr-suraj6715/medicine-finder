@@ -8,8 +8,12 @@ from sqlalchemy import or_, and_, desc
 
 from database import engine, get_db, Base
 import models, schemas
+import hashlib
 
 Base.metadata.create_all(bind=engine)
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode()).hexdigest() if password else ""
 
 app = FastAPI(
     title="MediFind Python Backend API",
@@ -62,10 +66,15 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
         return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name or "Rider Partner", "role": "rider"}}
 
     if not user:
-        user = models.User(id=generate_cuid(), email=email, name=email.split("@")[0].capitalize(), role=req.role or "user", createdAt=current_iso_time())
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+    if user.password and req.password:
+        if user.password != hash_password(req.password):
+            from fastapi import HTTPException
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+    elif not user.password:
+        pass # Allow older users without password to login
     
     return {"success": True, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role}}
 
@@ -74,9 +83,11 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
     email = req.email.lower().strip()
     existing = db.query(models.User).filter(models.User.email == email).first()
     if existing:
-        return {"success": True, "user": {"id": existing.id, "email": existing.email, "name": existing.name, "role": existing.role}}
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Email already in use")
     
-    user = models.User(id=generate_cuid(), name=req.name, email=email, role=req.role or "user", createdAt=current_iso_time())
+    hashed_pw = hash_password(req.password) if req.password else None
+    user = models.User(id=generate_cuid(), name=req.name, email=email, password=hashed_pw, role=req.role or "user", createdAt=current_iso_time())
     db.add(user)
     db.commit()
     db.refresh(user)

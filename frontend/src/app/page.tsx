@@ -156,7 +156,7 @@ function LeafletMap({
 }
 
 // ─── Login Modal ──────────────────────────────────────────────────
-function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u: AuthUser) => void }) {
+function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onSuccess: (u: AuthUser) => void; onSwitch: () => void }) {
   const [email, setEmail] = useState("demo@medstore.com");
   const [password, setPassword] = useState("demo123");
   const [showPw, setShowPw] = useState(false);
@@ -228,13 +228,17 @@ function LoginModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+        <div className="mt-4 text-center text-sm">
+          <span className="text-slate-500">Don't have an account? </span>
+          <button onClick={onSwitch} className="text-[#1E3A2F] font-semibold hover:underline">Sign up</button>
+        </div>
       </div>
     </div>
   );
 }
 
 // ─── Signup Modal ─────────────────────────────────────────────────
-function SignupModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (u: AuthUser) => void }) {
+function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onSuccess: (u: AuthUser) => void; onSwitch: () => void }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", location: "", role: "user" });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -313,6 +317,10 @@ function SignupModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             {loading ? "Creating account..." : "Create Account"}
           </button>
         </form>
+        <div className="mt-4 text-center text-sm">
+          <span className="text-slate-500">Already have an account? </span>
+          <button onClick={onSwitch} className="text-[#1E3A2F] font-semibold hover:underline">Sign in</button>
+        </div>
       </div>
     </div>
   );
@@ -798,8 +806,8 @@ export default function Home() {
         </div>
       )}
 
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onSuccess={handleAuthSuccess} />}
-      {showSignup && <SignupModal onClose={() => setShowSignup(false)} onSuccess={handleAuthSuccess} />}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onSuccess={handleAuthSuccess} onSwitch={() => { setShowLogin(false); setShowSignup(true); }} />}
+      {showSignup && <SignupModal onClose={() => setShowSignup(false)} onSuccess={handleAuthSuccess} onSwitch={() => { setShowSignup(false); setShowLogin(true); }} />}
 
       {/* ── EMERGENCY MODE MODAL ── */}
       {showEmergencyModal && (

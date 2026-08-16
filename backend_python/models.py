@@ -57,6 +57,7 @@ class User(Base):
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=False)
+    password = Column(String)
     role = Column(String, default="user")
     loyaltyPoints = Column(Integer, default=0)
     riderRating = Column(Float, default=3.0)
