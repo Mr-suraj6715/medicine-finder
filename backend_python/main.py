@@ -92,7 +92,13 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Email already in use")
         
         hashed_pw = hash_password(req.password) if req.password else None
-        user = models.User(id=generate_cuid(), name=req.name, email=email, password=hashed_pw, role=req.role or "user", createdAt=current_iso_time(), updatedAt=current_iso_time())
+        user = models.User(
+            id=generate_cuid(), name=req.name, email=email,
+            password=hashed_pw, role=req.role or "user",
+            phone=req.phone or None,
+            address=req.location or None,
+            createdAt=current_iso_time(), updatedAt=current_iso_time()
+        )
         db.add(user)
         db.commit()
         db.refresh(user)

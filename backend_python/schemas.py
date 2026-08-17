@@ -12,6 +12,8 @@ class SignupRequest(BaseModel):
     email: str
     password: Optional[str] = None
     role: Optional[str] = "user"
+    phone: Optional[str] = None
+    location: Optional[str] = None
 
 class AddressCreate(BaseModel):
     userId: str

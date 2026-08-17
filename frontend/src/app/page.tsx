@@ -248,7 +248,7 @@ function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; on
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Signup failed");
+      if (!res.ok) throw new Error(data.detail || data.error || "Signup failed");
       localStorage.setItem("medifind_user", JSON.stringify(data.user));
       onSuccess(data.user);
     } catch (err: any) {
