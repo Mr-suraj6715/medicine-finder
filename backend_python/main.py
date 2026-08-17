@@ -129,7 +129,8 @@ def create_user_address(req: schemas.AddressCreate, db: Session = Depends(get_db
         address=req.address,
         latitude=19.076,
         longitude=72.877,
-        createdAt=current_iso_time()
+        createdAt=current_iso_time(),
+        updatedAt=current_iso_time()
     )
     db.add(addr)
     db.commit()
@@ -233,10 +234,12 @@ def create_order(req: schemas.OrderCreate, db: Session = Depends(get_db)):
         deliveryAddress=req.deliveryAddress,
         trackingNumber=tracking_num,
         status="PENDING",
-        createdAt=current_iso_time()
+        createdAt=current_iso_time(),
+        updatedAt=current_iso_time()
     )
     db.add(new_order)
     db.flush()
+
 
     for item in req.items:
         order_item = models.OrderItem(
@@ -713,11 +716,11 @@ def update_shop_inventory(payload: dict, db: Session = Depends(get_db)):
 
         medicine = db.query(models.Medicine).filter(models.Medicine.name.ilike(f"%{med_name}%")).first()
         if not medicine:
-            medicine = models.Medicine(id=generate_cuid(), name=med_name, category=category, createdAt=current_iso_time())
+            medicine = models.Medicine(id=generate_cuid(), name=med_name, category=category, createdAt=current_iso_time(), updatedAt=current_iso_time())
             db.add(medicine)
             db.flush()
 
-        inv = models.Inventory(id=generate_cuid(), medicineId=medicine.id, pharmacyId=pharmacy_id, price=price, stock=stock, createdAt=current_iso_time())
+        inv = models.Inventory(id=generate_cuid(), medicineId=medicine.id, pharmacyId=pharmacy_id, price=price, stock=stock, createdAt=current_iso_time(), updatedAt=current_iso_time())
         db.add(inv)
         db.commit()
         return {"success": True}
@@ -1134,7 +1137,8 @@ def ai_consultant(req: schemas.AIConsultantRequest, db: Session = Depends(get_db
                 id=generate_cuid(), userId=user.id,
                 symptoms=symptoms_text,
                 prescription=", ".join([p["name"] for p in all_products[:5]]) or "General guidance only",
-                createdAt=current_iso_time()
+                createdAt=current_iso_time(),
+                updatedAt=current_iso_time()
             )
             db.add(log); db.commit()
 
