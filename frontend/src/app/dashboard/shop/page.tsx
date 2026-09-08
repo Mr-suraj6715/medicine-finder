@@ -4,7 +4,8 @@ import {
   HeartPulse, Package, LogOut, Store, Bell, TrendingUp,
   Plus, CheckCircle, X, ChevronRight, Pill, Clock,
   ShoppingCart, BarChart3, Settings, AlertCircle, Users, Edit3, Activity,
-  MapPin, Navigation, Save, Phone, ToggleLeft, ToggleRight, UserCheck, RefreshCw, Star
+  MapPin, Navigation, Save, Phone, ToggleLeft, ToggleRight, UserCheck, RefreshCw, Star,
+  Upload, Download, FileSpreadsheet, Check
 } from "lucide-react";
 
 type AuthUser = { id: string; email: string; name: string; role: string };
@@ -34,6 +35,15 @@ export default function ShopDashboard() {
   const [newMed, setNewMed] = useState({ name: "", category: "", price: "", stock: "" });
   const [editingStock, setEditingStock] = useState<string | null>(null);
   const [editStock, setEditStock] = useState({ price: "", stock: "", category: "" });
+
+  // Bulk Upload state
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkFile, setBulkFile] = useState<File | null>(null);
+  const [bulkPreview, setBulkPreview] = useState<Array<{ name: string; category: string; price: number; stock: number; description?: string }>>([]);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ total: number; added: number; updated: number } | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+
 
   // Settings state
   const [settings, setSettings] = useState({
@@ -268,6 +278,133 @@ export default function ShopDashboard() {
     }
   };
 
+  const downloadSampleCSV = () => {
+    const sampleContent = `Medicine Name,Category,Price,Stock,Description
+Paracetamol 650mg,Analgesics,32.00,150,Fast relief for fever and mild to moderate pain
+Amoxicillin 500mg,Antibiotics,85.00,60,Antibacterial capsule for respiratory and ear infections
+Cetirizine 10mg,Antiallergic,25.00,100,Antihistamine for allergy cold sneezing and hives
+Pantoprazole 40mg,Gastrointestinal,68.00,80,Proton pump inhibitor for acidity GERD and heartburn
+Vitamin C 500mg Chewable,Supplements,42.00,200,Immunity booster ascorbic acid chewable tablets
+Azithromycin 500mg,Antibiotics,125.00,45,Broad spectrum macrolide antibiotic strip
+Metformin 500mg,Antidiabetics,40.00,120,Oral blood glucose regulation for type 2 diabetes
+Ibuprofen 400mg,Analgesics,38.00,90,Anti-inflammatory painkiller for muscle ache and swelling`;
+
+    const blob = new Blob([sampleContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "sample_medifind_inventory.csv";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportCSV = () => {
+    if (!inventory || inventory.length === 0) {
+      alert("No inventory to export.");
+      return;
+    }
+    const headers = "Medicine Name,Category,Price,Stock,Sold\n";
+    const rows = inventory.map(item => `"${(item.name || "").replace(/"/g, '""')}","${(item.category || "").replace(/"/g, '""')}",${item.price || 0},${item.stock || 0},${item.sold || 0}`).join("\n");
+    const blob = new Blob([headers + rows], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `inventory_${settings.name ? settings.name.replace(/\s+/g, '_') : "medstore"}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const parseCSVFile = (file: File) => {
+    setBulkFile(file);
+    setBulkError(null);
+    setBulkResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      if (!text) {
+        setBulkError("Empty file uploaded.");
+        return;
+      }
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+      if (lines.length < 2) {
+        setBulkError("CSV must contain a header row and at least one medicine row.");
+        return;
+      }
+
+      const rawHeaders = lines[0].split(",").map(h => h.trim().replace(/^["']|["']$/g, "").toLowerCase());
+      
+      let nameIdx = rawHeaders.findIndex(h => h.includes("name") || h.includes("medicine") || h.includes("drug") || h.includes("item") || h.includes("product"));
+      let catIdx = rawHeaders.findIndex(h => h.includes("category") || h.includes("type") || h.includes("class"));
+      let priceIdx = rawHeaders.findIndex(h => h.includes("price") || h.includes("mrp") || h.includes("rate") || h.includes("cost"));
+      let stockIdx = rawHeaders.findIndex(h => h.includes("stock") || h.includes("qty") || h.includes("quantity") || h.includes("unit"));
+      let descIdx = rawHeaders.findIndex(h => h.includes("desc") || h.includes("indication") || h.includes("detail"));
+
+      if (nameIdx === -1) nameIdx = 0;
+      if (catIdx === -1) catIdx = 1;
+      if (priceIdx === -1) priceIdx = 2;
+      if (stockIdx === -1) stockIdx = 3;
+
+      const items: Array<{ name: string; category: string; price: number; stock: number; description?: string }> = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(s => s.trim().replace(/^["']|["']$/g, ""));
+        const name = parts[nameIdx] || "";
+        if (!name) continue;
+
+        const category = parts[catIdx] || "General";
+        const price = parseFloat(parts[priceIdx]) || 0;
+        const stock = parseInt(parts[stockIdx], 10) || 0;
+        const desc = descIdx !== -1 ? parts[descIdx] : undefined;
+
+        items.push({ name, category, price, stock, description: desc });
+      }
+
+      if (items.length === 0) {
+        setBulkError("No valid medicines found in the uploaded CSV.");
+        return;
+      }
+      setBulkPreview(items);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleBulkUploadSubmit = async () => {
+    if (!user || bulkPreview.length === 0) return;
+    setBulkLoading(true);
+    setBulkError(null);
+    try {
+      const token = localStorage.getItem("medifind_token");
+      const res = await fetch("/api/shop/inventory/bulk-upload", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { "Authorization": `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          pharmacyId: user.id,
+          items: bulkPreview
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || data.error || "Failed to process bulk upload");
+      }
+      setBulkResult({
+        total: data.totalProcessed || bulkPreview.length,
+        added: data.added || 0,
+        updated: data.updated || 0
+      });
+      fetchShopData(user.id);
+    } catch (err: any) {
+      setBulkError(err.message || "Failed to upload bulk inventory");
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   const handleSaveSettings = async () => {
     if (!user) return;
@@ -519,11 +656,41 @@ export default function ShopDashboard() {
         {/* INVENTORY TAB */}
         {tab === "inventory" && (
           <div>
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">Medicine Catalog & Stock</h2>
-              <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md">
-                <Plus size={15} /> Add Medicine
-              </button>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+              <div>
+                <h2 className="text-2xl font-serif font-bold text-slate-900">Medicine Catalog & Stock</h2>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">Manage stock individually or bulk-upload thousands of medicines with CSV.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                  title="Download your entire inventory as CSV"
+                >
+                  <Download size={14} className="text-slate-500" /> Export CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBulkModal(true);
+                    setBulkFile(null);
+                    setBulkPreview([]);
+                    setBulkResult(null);
+                    setBulkError(null);
+                  }}
+                  className="flex items-center gap-2 bg-[#E8F3ED] hover:bg-[#D7ECE0] text-[#1E3A2F] border border-[#C2E0CE] px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm active:scale-95"
+                >
+                  <FileSpreadsheet size={15} /> Bulk Upload CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                >
+                  <Plus size={15} /> Add Single
+                </button>
+              </div>
             </div>
             <div className="bg-white rounded-[28px] border border-[#E2EFE7] shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
@@ -556,13 +723,13 @@ export default function ShopDashboard() {
                         </td>
                         <td className="px-6 py-4">
                           {editingStock === med.id ? (
-                            <input type="number" value={editStock.price} onChange={e => setEditStock(p => ({ ...p, price: e.target.value }))}
+                            <input type="number" step="0.01" min="0" value={editStock.price} onChange={e => setEditStock(p => ({ ...p, price: e.target.value }))}
                               className="w-20 border border-emerald-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F]" />
                           ) : <span className="font-black text-[#1E3A2F]">₹{med.price}</span>}
                         </td>
                         <td className="px-6 py-4">
                           {editingStock === med.id ? (
-                            <input type="number" value={editStock.stock} onChange={e => setEditStock(p => ({ ...p, stock: e.target.value }))}
+                            <input type="number" min="0" value={editStock.stock} onChange={e => setEditStock(p => ({ ...p, stock: e.target.value }))}
                               className="w-20 border border-emerald-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F]" />
                           ) : (
                             <span className={`font-bold ${med.stock < 20 ? "text-rose-600" : "text-slate-800"}`}>
@@ -841,12 +1008,12 @@ export default function ShopDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Price (₹)</label>
-                  <input type="number" step="0.01" required value={newMed.price} onChange={e => setNewMed(p => ({ ...p, price: e.target.value }))}
+                  <input type="number" step="0.01" min="0" required value={newMed.price} onChange={e => setNewMed(p => ({ ...p, price: e.target.value }))}
                     placeholder="25.00" className="w-full bg-[#F6FAF7] border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" />
                 </div>
                 <div>
                   <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Stock Qty</label>
-                  <input type="number" required value={newMed.stock} onChange={e => setNewMed(p => ({ ...p, stock: e.target.value }))}
+                  <input type="number" min="0" required value={newMed.stock} onChange={e => setNewMed(p => ({ ...p, stock: e.target.value }))}
                     placeholder="50" className="w-full bg-[#F6FAF7] border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" />
                 </div>
               </div>
@@ -855,6 +1022,161 @@ export default function ShopDashboard() {
                 <button type="button" onClick={() => setShowAddModal(false)} className="bg-slate-100 text-slate-600 font-bold px-6 py-3.5 rounded-full text-xs uppercase tracking-wider">Cancel</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* BULK UPLOAD MODAL */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-[32px] p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-slate-100 max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 bg-[#E8F3ED] rounded-2xl flex items-center justify-center text-[#1E3A2F] shrink-0">
+                  <FileSpreadsheet size={22} />
+                </div>
+                <div>
+                  <h3 className="font-serif font-bold text-slate-900 text-xl">Bulk Upload Medicine Inventory</h3>
+                  <p className="text-xs text-slate-500 font-medium">Add or update thousands of medicines at once via CSV / Excel.</p>
+                </div>
+              </div>
+              <button onClick={() => setShowBulkModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 pr-1 space-y-4">
+              {/* Template Download Banner */}
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 bg-[#F6FAF7] rounded-2xl border border-[#E2EFE7]">
+                <div className="text-xs">
+                  <p className="font-bold text-slate-800">Need the formatted CSV template?</p>
+                  <p className="text-slate-500 mt-0.5">Includes columns: Medicine Name, Category, Price, Stock, Description</p>
+                </div>
+                <button
+                  onClick={downloadSampleCSV}
+                  type="button"
+                  className="shrink-0 flex items-center gap-1.5 text-xs font-black bg-white hover:bg-slate-100 text-[#1E3A2F] border border-[#CDE3D5] px-4 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider"
+                >
+                  <Download size={13} /> Sample CSV
+                </button>
+              </div>
+
+              {/* File Upload Box */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-2">Upload Inventory CSV File</label>
+                <div className="relative border-2 border-dashed border-[#C2E0CE] hover:border-[#1E3A2F] rounded-2xl p-6 text-center bg-[#FBFDFB] transition-colors cursor-pointer group">
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        parseCSVFile(e.target.files[0]);
+                      }
+                    }}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  />
+                  <div className="flex flex-col items-center gap-2 pointer-events-none">
+                    <div className="w-12 h-12 rounded-2xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center group-hover:scale-110 transition-transform">
+                      <Upload size={22} />
+                    </div>
+                    {bulkFile ? (
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">{bulkFile.name}</p>
+                        <p className="text-xs text-slate-500">{(bulkFile.size / 1024).toFixed(1)} KB • Click or drop another file to replace</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Click to browse or drag & drop your CSV file here</p>
+                        <p className="text-xs text-slate-400 mt-0.5">Supports CSV files exported from Excel, Marg ERP, Vyapar, or Google Sheets</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Error Box */}
+              {bulkError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-2xl p-4 text-xs font-bold flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" />
+                  <span>{bulkError}</span>
+                </div>
+              )}
+
+              {/* Success Result Box */}
+              {bulkResult && (
+                <div className="bg-[#E8F3ED] border border-[#CDE3D5] text-[#1E3A2F] rounded-2xl p-4 text-xs font-medium animate-in fade-in">
+                  <div className="flex items-center gap-2 font-bold text-sm mb-1 text-emerald-800">
+                    <CheckCircle size={18} />
+                    <span>Upload & Sync Successful!</span>
+                  </div>
+                  <p>
+                    Processed <strong>{bulkResult.total}</strong> medicines: 
+                    <span className="text-emerald-700 font-bold ml-1">{bulkResult.added} newly added</span>, 
+                    <span className="text-indigo-700 font-bold ml-1">{bulkResult.updated} existing updated</span>.
+                  </p>
+                </div>
+              )}
+
+              {/* Live Preview Table */}
+              {bulkPreview.length > 0 && !bulkResult && (
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-black text-slate-600 uppercase tracking-wider">
+                      Preview ({bulkPreview.length} medicines ready to import)
+                    </span>
+                    <span className="text-[11px] text-slate-400">Showing first {Math.min(bulkPreview.length, 5)} rows</span>
+                  </div>
+                  <div className="border border-slate-200 rounded-2xl overflow-hidden text-xs">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200 font-bold text-slate-500">
+                        <tr>
+                          <th className="px-3 py-2">Medicine Name</th>
+                          <th className="px-3 py-2">Category</th>
+                          <th className="px-3 py-2">Price</th>
+                          <th className="px-3 py-2">Stock</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {bulkPreview.slice(0, 5).map((row, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                            <td className="px-3 py-2 font-bold text-slate-800">{row.name}</td>
+                            <td className="px-3 py-2 text-slate-500">{row.category}</td>
+                            <td className="px-3 py-2 font-bold text-[#1E3A2F]">₹{row.price.toFixed(2)}</td>
+                            <td className="px-3 py-2 font-medium">{row.stock} units</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {bulkPreview.length > 5 && (
+                      <div className="bg-slate-50 px-3 py-2 text-center text-[11px] text-slate-500 border-t border-slate-200">
+                        + {bulkPreview.length - 5} more medicines will be imported
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-4">
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(false)}
+                className="px-6 py-2.5 rounded-full text-xs font-bold text-slate-500 hover:bg-slate-100 uppercase tracking-wider"
+              >
+                Close
+              </button>
+              {bulkPreview.length > 0 && !bulkResult && (
+                <button
+                  type="button"
+                  disabled={bulkLoading}
+                  onClick={handleBulkUploadSubmit}
+                  className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-50 flex items-center gap-2"
+                >
+                  {bulkLoading ? "Processing..." : `Import ${bulkPreview.length} Medicines`}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -179,8 +179,9 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Login failed");
+      if (!res.ok) throw new Error(data.detail || data.error || "Login failed");
       localStorage.setItem("medifind_user", JSON.stringify(data.user));
+      if (data.token) localStorage.setItem("medifind_token", data.token);
       onSuccess(data.user);
     } catch (err: any) {
       setError(err.message);
@@ -250,6 +251,7 @@ function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; on
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || data.error || "Signup failed");
       localStorage.setItem("medifind_user", JSON.stringify(data.user));
+      if (data.token) localStorage.setItem("medifind_token", data.token);
       onSuccess(data.user);
     } catch (err: any) {
       setError(err.message);
