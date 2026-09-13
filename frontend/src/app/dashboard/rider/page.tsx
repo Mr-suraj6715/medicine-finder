@@ -4,6 +4,7 @@ import {
   HeartPulse, Package, LogOut, Navigation, CheckCircle, 
   Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
 import dynamic from "next/dynamic";
 
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -79,6 +80,7 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
 
 export default function RiderDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [tab, setTab] = useState<"active" | "available" | "history" | "earnings" | "profile">("active");
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +131,7 @@ export default function RiderDashboard() {
           if (user) {
             fetch("/api/rider/orders", {
               method: "PATCH",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({ riderId: user.id, latitude: loc.lat, longitude: loc.lng })
             });
           }
@@ -144,7 +146,7 @@ export default function RiderDashboard() {
   const fetchRiderData = useCallback(async (userId: string, silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const res = await fetch(`/api/rider/orders?riderId=${userId}`);
+      const res = await fetch(`/api/rider/orders?riderId=${userId}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.orders) {
         setOrders(data.orders);
@@ -173,34 +175,26 @@ export default function RiderDashboard() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem("medifind_user_rider");
-    const fallback = localStorage.getItem("medifind_user");
-    let u: AuthUser | null = null;
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.role === "rider") u = parsed;
-      } catch {}
-    }
-    if (!u && fallback) {
-      try {
-        const parsed = JSON.parse(fallback);
-        if (parsed.role === "rider") u = parsed;
-      } catch {}
-    }
+    const u = getStoredUser();
 
     if (!u) {
-      window.location.href = "/";
+      window.location.replace("/?auth=login&role=rider");
       return;
     }
 
-    setUser(u);
+    if (u.role !== "rider") {
+      window.location.replace(getDashboardUrl(u.role));
+      return;
+    }
+
+    setUser(u as any);
     setProfileForm({
       name: u.name || "",
       phone: u.phone || "",
       address: u.address || "",
       vehicleType: u.vehicleType || "Motorcycle",
     });
+    setAuthLoading(false);
     fetchRiderData(u.id);
     
     const interval = setInterval(() => fetchRiderData(u.id, true), 5000);
@@ -208,20 +202,15 @@ export default function RiderDashboard() {
   }, [fetchRiderData]);
 
   const handleLogout = () => {
-    localStorage.removeItem("medifind_user");
-    localStorage.removeItem("medifind_role");
-    localStorage.removeItem("medifind_active_role");
-    localStorage.removeItem("medifind_user_user");
-    localStorage.removeItem("medifind_user_shop_owner");
-    localStorage.removeItem("medifind_user_rider");
-    window.location.href = "/";
+    clearAuthSession();
+    window.location.replace("/?auth=login&role=rider");
   };
 
   const updateStatus = async (orderId: string, status: string) => {
     try {
       const res = await fetch('/api/rider/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ orderId, status, riderId: user?.id }),
       });
       if (res.ok) {
@@ -236,7 +225,7 @@ export default function RiderDashboard() {
     try {
       const res = await fetch('/api/rider/orders', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ orderId, riderId: user?.id }),
       });
       if (res.ok) {
@@ -271,7 +260,7 @@ export default function RiderDashboard() {
     try {
       const res = await fetch('/api/rider/profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           userId: user.id,
           name: profileForm.name,
@@ -309,6 +298,15 @@ export default function RiderDashboard() {
   
   const emergencyDeliveries = historyOrders.filter(o => o.isEmergency);
   const totalEarnings = emergencyDeliveries.reduce((sum, o) => sum + (o.surgeFee || 0), 0);
+
+  if (authLoading || !user) return (
+    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
+      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+        <HeartPulse size={32} />
+      </div>
+      <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Delivery Partner Authorization...</p>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#F6FAF7] flex flex-col md:flex-row font-sans text-slate-900">

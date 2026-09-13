@@ -11,6 +11,8 @@ class Medicine(Base):
     category = Column(String, nullable=True)
     indications = Column(String, nullable=True)
     image = Column(String, nullable=True)
+    genericName = Column(String, nullable=True)
+    manufacturer = Column(String, nullable=True)
     createdAt = Column(String, nullable=True)
     updatedAt = Column(String, nullable=True)
 
@@ -44,6 +46,12 @@ class Inventory(Base):
     price = Column(Float, nullable=False)
     stock = Column(Integer, default=0)
     sold = Column(Integer, default=0)
+    batchNumber = Column(String, nullable=True)
+    mrp = Column(Float, nullable=True)
+    purchasePrice = Column(Float, nullable=True)
+    expiryDate = Column(String, nullable=True)
+    supplier = Column(String, nullable=True)
+    stockLocation = Column(String, nullable=True)
     createdAt = Column(String, nullable=True)
     updatedAt = Column(String, nullable=True)
 
@@ -144,3 +152,15 @@ class OrderItem(Base):
 
     order = relationship("Order", back_populates="items")
     inventory = relationship("Inventory", back_populates="orderItems")
+
+class PasswordResetToken(Base):
+    __tablename__ = "PasswordResetToken"
+
+    id = Column(String, primary_key=True, index=True)
+    userId = Column(String, ForeignKey("User.id"), nullable=False)
+    tokenHash = Column(String, unique=True, index=True, nullable=False)
+    expiresAt = Column(String, nullable=False)
+    isUsed = Column(Boolean, default=False)
+    createdAt = Column(String, nullable=False)
+
+    user = relationship("User")

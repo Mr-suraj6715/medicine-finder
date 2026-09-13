@@ -5,6 +5,7 @@ import {
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles
 } from "lucide-react";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
 
 type AuthUser = { id: string; email: string; name: string; role: string; loyaltyPoints: number };
 
@@ -200,6 +201,7 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
 
 export default function UserDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [tab, setTab] = useState<"orders" | "profile" | "health">("orders");
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
@@ -212,7 +214,7 @@ export default function UserDashboard() {
 
   const fetchAddresses = useCallback(async (uid: string) => {
     try {
-      const res = await fetch(`/api/user/address?userId=${uid}`);
+      const res = await fetch(`/api/user/address?userId=${uid}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.addresses) setUserAddresses(data.addresses);
     } catch (err) { console.error(err); }
@@ -223,34 +225,26 @@ export default function UserDashboard() {
   const [isTrackingMode, setIsTrackingMode] = useState(false);
 
   useEffect(() => {
-    const stored = localStorage.getItem("medifind_user_user");
-    const fallback = localStorage.getItem("medifind_user");
-    let u: AuthUser | null = null;
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        if (parsed.role === "user") u = parsed;
-      } catch {}
-    }
-    if (!u && fallback) {
-      try {
-        const parsed = JSON.parse(fallback);
-        if (parsed.role === "user") u = parsed;
-      } catch {}
-    }
+    const u = getStoredUser();
 
     if (!u) {
-      window.location.href = "/";
+      window.location.replace("/?auth=login&role=user");
       return;
     }
 
-    setUser(u);
+    if (u.role !== "user") {
+      window.location.replace(getDashboardUrl(u.role));
+      return;
+    }
+
+    setUser(u as any);
     setLoyaltyPoints(u.loyaltyPoints || 0);
+    setAuthLoading(false);
   }, []);
 
   const fetchLoyalty = useCallback(async (email: string) => {
     try {
-      const res = await fetch(`/api/loyalty?email=${email}`);
+      const res = await fetch(`/api/loyalty?email=${email}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.points !== undefined) setLoyaltyPoints(data.points);
       else if (data.loyaltyPoints !== undefined) setLoyaltyPoints(data.loyaltyPoints);
@@ -260,7 +254,7 @@ export default function UserDashboard() {
   const fetchOrders = useCallback(async (email: string, silent = false) => {
     try {
       if (!silent) setLoadingOrders(true);
-      const res = await fetch(`/api/orders?email=${email}`);
+      const res = await fetch(`/api/orders?email=${email}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setOrders(data.orders || []);
     } catch {} finally { if (!silent) setLoadingOrders(false); }
@@ -268,7 +262,7 @@ export default function UserDashboard() {
 
   const fetchHealthLogs = useCallback(async (email: string) => {
     try {
-      const res = await fetch(`/api/ai-prescribe?email=${email}`);
+      const res = await fetch(`/api/ai-prescribe?email=${email}`, { headers: getAuthHeaders() });
       const data = await res.json();
       setHealthLogs(data.healthLogs || data.logs || []);
     } catch {}
@@ -299,13 +293,8 @@ export default function UserDashboard() {
   }, [orders, isTrackingMode, trackingOrder]);
 
   const handleLogout = () => {
-    localStorage.removeItem("medifind_user");
-    localStorage.removeItem("medifind_role");
-    localStorage.removeItem("medifind_active_role");
-    localStorage.removeItem("medifind_user_user");
-    localStorage.removeItem("medifind_user_shop_owner");
-    localStorage.removeItem("medifind_user_rider");
-    window.location.href = "/";
+    clearAuthSession();
+    window.location.replace("/?auth=login&role=user");
   };
 
   const handleAddAddress = async () => {
@@ -313,7 +302,7 @@ export default function UserDashboard() {
     try {
       const res = await fetch("/api/user/address", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ userId: user.id, ...newAddress }),
       });
       if (res.ok) {
@@ -328,7 +317,10 @@ export default function UserDashboard() {
     if (!window.confirm("Are you sure you want to delete this address?")) return;
     setDeletingAddressId(id);
     try {
-      const res = await fetch(`/api/user/address?id=${id}`, { method: "DELETE" });
+      const res = await fetch(`/api/user/address?id=${id}`, { 
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         setUserAddresses(prev => prev.filter(a => a.id !== id));
       }
@@ -339,9 +331,12 @@ export default function UserDashboard() {
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);
   const deliveredCount = orders.filter(o => o.status === "DELIVERED").length;
 
-  if (!user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex items-center justify-center">
-      <div className="animate-spin w-8 h-8 border-4 border-[#1E3A2F] border-t-transparent rounded-full" />
+  if (authLoading || !user) return (
+    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
+      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+        <HeartPulse size={32} />
+      </div>
+      <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Customer Authorization...</p>
     </div>
   );
 

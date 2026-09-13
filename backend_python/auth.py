@@ -51,13 +51,6 @@ def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session 
         headers={"WWW-Authenticate": "Bearer"},
     )
     if not token:
-        # Graceful fallback for local development & pre-authenticated demo sessions
-        dev_user = db.query(models.User).filter(models.User.email == "shop@medstore.com").first()
-        if dev_user:
-            return dev_user
-        first_user = db.query(models.User).first()
-        if first_user:
-            return first_user
         raise credentials_exception
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

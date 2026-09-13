@@ -17,7 +17,7 @@ class LoginRequest(BaseModel):
 class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     email: str = Field(..., max_length=255)
-    password: str = Field(..., min_length=8, max_length=128)
+    password: str = Field(..., min_length=6, max_length=128)
     role: Optional[str] = "user"
     phone: Optional[str] = Field(None, max_length=20)
     location: Optional[str] = Field(None, max_length=255)
@@ -123,13 +123,46 @@ class InventoryActionPayload(BaseModel):
 
 class BulkInventoryItem(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)
+    genericName: Optional[str] = Field(None, max_length=255)
     category: Optional[str] = Field("General", max_length=100)
-    price: float = Field(0.0, ge=0.0)
+    batchNumber: Optional[str] = Field(None, max_length=100)
     stock: int = Field(0, ge=0)
+    mrp: Optional[float] = Field(None, ge=0.0)
+    price: float = Field(0.0, ge=0.0)
+    purchasePrice: Optional[float] = Field(None, ge=0.0)
+    expiryDate: Optional[str] = Field(None, max_length=50)
+    manufacturer: Optional[str] = Field(None, max_length=255)
+    supplier: Optional[str] = Field(None, max_length=255)
+    stockLocation: Optional[str] = Field(None, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
 
 class BulkInventoryUploadRequest(BaseModel):
     pharmacyId: str = Field(..., max_length=128)
     items: List[BulkInventoryItem]
+    conflictStrategy: Optional[str] = Field("update_add", pattern=r"^(update_add|replace|skip)$")
 
+class ResetPasswordRequest(BaseModel):
+    email: str = Field(..., max_length=255)
+    newPassword: str = Field(..., min_length=6, max_length=128)
+    role: Optional[str] = "user"
 
+    @validator("email")
+    def validate_email(cls, v):
+        email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+        if not re.match(email_regex, v):
+            raise ValueError("Invalid email format")
+        return v.strip().lower()
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., max_length=255)
+
+    @validator("email")
+    def validate_email(cls, v):
+        email_regex = r"^[\w\.-]+@[\w\.-]+\.\w+$"
+        if not re.match(email_regex, v):
+            raise ValueError("Invalid email format")
+        return v.strip().lower()
+
+class ConfirmResetPasswordRequest(BaseModel):
+    token: str = Field(..., min_length=10, max_length=255)
+    newPassword: str = Field(..., min_length=6, max_length=128)

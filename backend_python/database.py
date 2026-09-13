@@ -3,6 +3,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+from dotenv import load_dotenv
+load_dotenv()
+
 # Support an environment variable for PostgreSQL (Render/Neon/Supabase)
 # If not present, fallback to the local SQLite database
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")

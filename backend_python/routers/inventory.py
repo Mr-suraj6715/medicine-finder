@@ -11,6 +11,13 @@ router = APIRouter(prefix="/api", tags=["inventory"])
 def get_shop_inventory(pharmacyId: str = Query(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can view inventory")
+        
+    pharmacy = db.query(models.Pharmacy).filter(models.Pharmacy.id == pharmacyId).first()
+    if not pharmacy:
+        pharmacy = db.query(models.Pharmacy).first()
+        if pharmacy:
+            pharmacyId = pharmacy.id
+
     inventory = db.query(models.Inventory).options(
         joinedload(models.Inventory.medicine)
     ).filter(models.Inventory.pharmacyId == pharmacyId).all()
@@ -23,11 +30,19 @@ def get_shop_inventory(pharmacyId: str = Query(...), db: Session = Depends(get_d
                 "pharmacyId": inv.pharmacyId,
                 "price": inv.price,
                 "stock": inv.stock,
-                "sold": inv.sold,
+                "sold": inv.sold or 0,
+                "batchNumber": inv.batchNumber,
+                "mrp": inv.mrp,
+                "purchasePrice": inv.purchasePrice,
+                "expiryDate": inv.expiryDate,
+                "supplier": inv.supplier,
+                "stockLocation": inv.stockLocation,
                 "medicine": {
                     "id": inv.medicine.id,
                     "name": inv.medicine.name,
-                    "category": inv.medicine.category
+                    "genericName": inv.medicine.genericName,
+                    "category": inv.medicine.category,
+                    "manufacturer": inv.medicine.manufacturer
                 }
             }
             for inv in inventory
@@ -112,8 +127,11 @@ def bulk_upload_inventory(
         if pharmacy:
             pharmacy_id = pharmacy.id
 
+    strategy = payload.conflictStrategy or "update_add"
     added_count = 0
     updated_count = 0
+    skipped_count = 0
+    failed_count = 0
     errors = []
     
     # Pre-cache existing medicines and inventory
@@ -121,49 +139,89 @@ def bulk_upload_inventory(
     existing_inv = {inv.medicineId: inv for inv in db.query(models.Inventory).filter(models.Inventory.pharmacyId == pharmacy_id).all()}
     
     for idx, item in enumerate(payload.items):
-        name = item.name.strip()
-        if not name:
-            continue
+        try:
+            name = (item.name or "").strip()
+            if not name:
+                failed_count += 1
+                errors.append(f"Row {idx+1}: Missing medicine name")
+                continue
+                
+            key = name.lower()
+            medicine = existing_meds.get(key)
             
-        key = name.lower()
-        medicine = existing_meds.get(key)
-        
-        if not medicine:
-            med_id = generate_cuid()
-            medicine = models.Medicine(
-                id=med_id,
-                name=name,
-                description=item.description or f"Quality {item.category or 'General'} medication.",
-                category=item.category or "General",
-                image="/medicine/placeholder.jpg",
-                createdAt=current_iso_time(),
-                updatedAt=current_iso_time()
-            )
-            db.add(medicine)
-            existing_meds[key] = medicine
-        
-        inv = existing_inv.get(medicine.id)
-        if inv:
-            if item.price is not None and item.price >= 0:
-                inv.price = float(item.price)
-            if item.stock is not None and item.stock >= 0:
-                inv.stock = int(item.stock)
-            inv.updatedAt = current_iso_time()
-            updated_count += 1
-        else:
-            new_inv = models.Inventory(
-                id=generate_cuid(),
-                medicineId=medicine.id,
-                pharmacyId=pharmacy_id,
-                price=float(item.price) if item.price is not None else 0.0,
-                stock=int(item.stock) if item.stock is not None else 0,
-                sold=0,
-                createdAt=current_iso_time(),
-                updatedAt=current_iso_time()
-            )
-            db.add(new_inv)
-            existing_inv[medicine.id] = new_inv
-            added_count += 1
+            if not medicine:
+                med_id = generate_cuid()
+                medicine = models.Medicine(
+                    id=med_id,
+                    name=name,
+                    genericName=item.genericName,
+                    category=item.category or "General",
+                    manufacturer=item.manufacturer,
+                    description=item.description or f"Quality {item.category or 'General'} medication.",
+                    image="/medicine/placeholder.jpg",
+                    createdAt=current_iso_time(),
+                    updatedAt=current_iso_time()
+                )
+                db.add(medicine)
+                existing_meds[key] = medicine
+            else:
+                if item.genericName and not medicine.genericName:
+                    medicine.genericName = item.genericName
+                if item.manufacturer and not medicine.manufacturer:
+                    medicine.manufacturer = item.manufacturer
+            
+            inv = existing_inv.get(medicine.id)
+            if inv:
+                if strategy == "skip":
+                    skipped_count += 1
+                    continue
+                elif strategy == "update_add":
+                    inv.stock = (inv.stock or 0) + (int(item.stock) if item.stock is not None else 0)
+                else: # replace
+                    inv.stock = int(item.stock) if item.stock is not None else 0
+
+                if item.price is not None and item.price >= 0:
+                    inv.price = float(item.price)
+                if item.mrp is not None and item.mrp >= 0:
+                    inv.mrp = float(item.mrp)
+                if item.purchasePrice is not None and item.purchasePrice >= 0:
+                    inv.purchasePrice = float(item.purchasePrice)
+                if item.batchNumber:
+                    inv.batchNumber = item.batchNumber
+                if item.expiryDate:
+                    inv.expiryDate = item.expiryDate
+                if item.supplier:
+                    inv.supplier = item.supplier
+                if item.stockLocation:
+                    inv.stockLocation = item.stockLocation
+                inv.updatedAt = current_iso_time()
+                updated_count += 1
+            else:
+                selling_price = float(item.price) if item.price is not None else (float(item.mrp) if item.mrp is not None else 0.0)
+                mrp_val = float(item.mrp) if item.mrp is not None else selling_price
+                purchase_val = float(item.purchasePrice) if item.purchasePrice is not None else None
+                new_inv = models.Inventory(
+                    id=generate_cuid(),
+                    medicineId=medicine.id,
+                    pharmacyId=pharmacy_id,
+                    price=selling_price,
+                    mrp=mrp_val,
+                    purchasePrice=purchase_val,
+                    stock=int(item.stock) if item.stock is not None else 0,
+                    batchNumber=item.batchNumber,
+                    expiryDate=item.expiryDate,
+                    supplier=item.supplier,
+                    stockLocation=item.stockLocation,
+                    sold=0,
+                    createdAt=current_iso_time(),
+                    updatedAt=current_iso_time()
+                )
+                db.add(new_inv)
+                existing_inv[medicine.id] = new_inv
+                added_count += 1
+        except Exception as item_err:
+            failed_count += 1
+            errors.append(f"Row {idx+1} ({item.name}): {str(item_err)}")
 
     try:
         db.commit()
@@ -176,6 +234,8 @@ def bulk_upload_inventory(
         "totalProcessed": len(payload.items),
         "added": added_count,
         "updated": updated_count,
+        "skipped": skipped_count,
+        "failed": failed_count,
         "errors": errors
     }
 

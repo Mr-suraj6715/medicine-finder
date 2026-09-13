@@ -19,14 +19,65 @@ const UseMapEvents = dynamic(() => import("react-leaflet").then(m => {
   return FlyTo;
 }), { ssr: false });
 
+const AutoFitBounds = dynamic(() => import("react-leaflet").then(m => {
+  const { useMap } = m;
+  function Bounds({ p1, p2 }: { p1?: [number, number]; p2?: [number, number] }) {
+    const map = useMap();
+    useEffect(() => {
+      if (p1 && p2 && p1[0] && p1[1] && p2[0] && p2[1]) {
+        try {
+          const bounds: any = [
+            [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1])],
+            [Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])],
+          ];
+          map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+        } catch (err) {
+          console.log("fitBounds error", err);
+        }
+      }
+    }, [p1, p2, map]);
+    return null;
+  }
+  return Bounds;
+}), { ssr: false });
+
 let L: any;
 if (typeof window !== "undefined") L = require("leaflet");
 
 // ─── Pharmacy data with coordinates ───────────────────────────────
 const NEARBY_PHARMACIES = [
   { name: "Apollo Pharmacy",    dist: "0.8 km", open: "Open till 10 PM", price: 15,    badge: "Cheapest", lat: 19.0760, lng: 72.8777 },
-  { name: "HealthPlus Medicos", dist: "1.2 km", open: "24/7 Open",       price: 18.50, badge: null,        lat: 19.0795, lng: 72.8810 },
-  { name: "City Pharma",        dist: "0.3 km", open: "Closes in 1 hr",  price: 20,    badge: null,        lat: 19.0740, lng: 72.8750 },
+  { name: "HealthPlus Medicos", dist: "1.2 km", open: "24/7 Open",       price: 18.50, badge: null,        lat: 19.1136, lng: 72.8697 },
+  { name: "City Pharma",        dist: "0.3 km", open: "Closes in 1 hr",  price: 20,    badge: null,        lat: 19.0454, lng: 72.8415 },
+  { name: "MediStore",          dist: "1.5 km", open: "Open till 9 PM",  price: 22,    badge: null,        lat: 19.0822, lng: 72.8840 },
+  { name: "MedLife Pharmacy",   dist: "2.1 km", open: "24/7 Open",       price: 19,    badge: null,        lat: 19.0178, lng: 72.8478 },
+  { name: "GenericMeds Hub",    dist: "3.5 km", open: "Open till 11 PM", price: 16,    badge: null,        lat: 19.2183, lng: 72.9781 },
+];
+
+function calculateDistanceKm(lat1?: number | null, lon1?: number | null, lat2?: number | null, lon2?: number | null): number {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return 1.5;
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const dist = R * c;
+  return Math.max(0.2, Math.round(dist * 10) / 10);
+}
+
+const PRESET_DELIVERY_AREAS = [
+  { label: "Andheri West (Mumbai)", lat: 19.1136, lng: 72.8697 },
+  { label: "Bandra West (Mumbai)", lat: 19.0596, lng: 72.8295 },
+  { label: "Dadar Central (Mumbai)", lat: 19.0178, lng: 72.8478 },
+  { label: "Borivali West (Mumbai)", lat: 19.2307, lng: 72.8567 },
+  { label: "Malad West (Mumbai)", lat: 19.1874, lng: 72.8484 },
+  { label: "Thane West (Mumbai)", lat: 19.2183, lng: 72.9781 },
+  { label: "Colaba (South Mumbai)", lat: 18.9067, lng: 72.8147 },
 ];
 
 import {
@@ -34,11 +85,11 @@ import {
   Navigation, Pill, ChevronRight, ShieldCheck, Globe,
   ShoppingCart, Minus, Plus, Gift, Brain, Sparkles, X,
   Activity, History, Stethoscope, User, Store, Eye, EyeOff,
-  Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award
+  Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award, KeyRound
 } from "lucide-react";
+import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, type AuthUser } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────
-type AuthUser = { id: string; email: string; name: string; role: "user" | "shop_owner" | "rider"; loyaltyPoints: number };
 type CartItem = { inventory: any; medicine: any; quantity: number };
 interface PharmacyMarker { 
   name: string; 
@@ -52,6 +103,10 @@ interface PharmacyMarker {
   rating?: string;
   reviews?: string;
   location?: string;
+  inventoryId?: string;
+  stock?: number;
+  open?: string;
+  isAvailable?: boolean;
 };
 
 interface UserAddress {
@@ -64,17 +119,23 @@ interface UserAddress {
 
 // ─── LeafletMap Sub-Component ─────────────────────────────────────
 function LeafletMap({
-  lat, lng, zoom = 13, title = "Your Location",
+  lat = 19.0760, lng = 72.8777, zoom = 13, title = "Your Location",
   focusLocation,
   pharmacies = [],
   onSelectPharmacy,
-  userLocation
+  userLocation,
+  customerLocation,
+  shopLocation,
+  showRoute = false
 }: {
-  lat: number; lng: number; zoom?: number; title?: string;
+  lat?: number; lng?: number; zoom?: number; title?: string;
   focusLocation?: { lat: number; lng: number } | null;
   pharmacies?: PharmacyMarker[];
   onSelectPharmacy?: (p: any) => void;
   userLocation?: { lat: number; lng: number } | null;
+  customerLocation?: { lat: number; lng: number; title?: string } | null;
+  shopLocation?: { lat: number; lng: number; name?: string; address?: string; price?: number } | null;
+  showRoute?: boolean;
 }) {
   const userIcon = typeof window !== "undefined" ? L?.icon({
     iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
@@ -96,21 +157,43 @@ function LeafletMap({
 
   const nearestPharmacy = [...pharmacies].sort((a, b) => (a.distValue || 999) - (b.distValue || 999))[0];
 
+  const mapCenterLat = customerLocation?.lat || userLocation?.lat || lat;
+  const mapCenterLng = customerLocation?.lng || userLocation?.lng || lng;
+
   return (
     <div className="w-full h-full rounded-3xl overflow-hidden relative shadow-inner border border-slate-200">
-      <MapContainer center={[lat, lng]} zoom={zoom} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+      <MapContainer center={[mapCenterLat, mapCenterLng]} zoom={zoom} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer 
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
         />
         
-        <Marker position={[lat, lng]} icon={userIcon}>
+        {/* Customer / User Marker */}
+        <Marker position={[mapCenterLat, mapCenterLng]} icon={userIcon}>
           <Popup>
-            <div className="font-bold text-emerald-800">{title}</div>
-            <div className="text-[10px] text-slate-400">Current Position</div>
+            <div className="font-bold text-emerald-800">{customerLocation?.title || title}</div>
+            <div className="text-[10px] text-slate-400">Delivery Location</div>
           </Popup>
         </Marker>
 
+        {/* Selected Shop Marker for Order Route */}
+        {shopLocation && (
+          <Marker position={[shopLocation.lat, shopLocation.lng]} icon={pharmacyIcon}>
+            <Popup>
+              <div className="p-1">
+                <div className="text-sm font-black text-slate-900">{shopLocation.name || "Medical Shop"}</div>
+                {shopLocation.address && <div className="text-[10px] text-slate-500 mt-0.5">{shopLocation.address}</div>}
+                {shopLocation.price !== undefined && (
+                  <div className="text-[11px] font-black text-emerald-700 mt-1">
+                    ₹{shopLocation.price.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Multiple Pharmacy Markers */}
         {pharmacies.map((p, i) => {
           const isNearest = nearestPharmacy && p.name === nearestPharmacy.name;
           return (
@@ -138,31 +221,380 @@ function LeafletMap({
           );
         })}
 
-        {focusLocation && (
+        {/* Direct Route Polyline connecting Customer & Shop */}
+        {showRoute && customerLocation && shopLocation && (
+          <Polyline 
+            positions={[[customerLocation.lat, customerLocation.lng], [shopLocation.lat, shopLocation.lng]]}
+            pathOptions={{ color: '#1E3A2F', weight: 4, opacity: 0.85, dashArray: '8, 8' }} 
+          />
+        )}
+
+        {/* Focus location polyline */}
+        {!showRoute && focusLocation && (
           <Polyline 
             positions={[[userLocation?.lat || lat, userLocation?.lng || lng], [focusLocation.lat, focusLocation.lng]]}
             pathOptions={{ color: '#2D4A3E', weight: 4, opacity: 0.7, dashArray: '10, 10' }} 
           />
         )}
 
-        {focusLocation ? (
+        {/* Auto fit bounds when route active */}
+        {showRoute && customerLocation && shopLocation ? (
+          <AutoFitBounds p1={[customerLocation.lat, customerLocation.lng]} p2={[shopLocation.lat, shopLocation.lng]} />
+        ) : focusLocation ? (
           <UseMapEvents lat={focusLocation.lat} lng={focusLocation.lng} zoom={16} />
         ) : (
-          <UseMapEvents lat={lat} lng={lng} zoom={zoom} />
+          <UseMapEvents lat={mapCenterLat} lng={mapCenterLng} zoom={zoom} />
         )}
       </MapContainer>
     </div>
   );
 }
 
+// ─── OrderRouteMapModal Component ─────────────────────────────────
+function OrderRouteMapModal({
+  isOpen,
+  onClose,
+  medicine,
+  pharmacy,
+  availablePharmacies = [],
+  onSelectPharmacy,
+  customerCoords,
+  distanceKm,
+  estimatedTimeMins,
+  userAddresses = [],
+  selectedAddressId,
+  onSelectAddressId,
+  selectedPresetArea,
+  onSelectPresetArea,
+  geoDenied,
+  quantity,
+  onQuantityChange,
+  onProceedToOrder,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  medicine: any;
+  pharmacy: any;
+  availablePharmacies?: any[];
+  onSelectPharmacy: (p: any) => void;
+  customerCoords: { lat: number; lng: number; label: string };
+  distanceKm: number;
+  estimatedTimeMins: number;
+  userAddresses?: UserAddress[];
+  selectedAddressId: string;
+  onSelectAddressId: (id: string) => void;
+  selectedPresetArea: string;
+  onSelectPresetArea: (area: string) => void;
+  geoDenied: boolean;
+  quantity: number;
+  onQuantityChange: (q: number) => void;
+  onProceedToOrder: (pharmacy: any, qty: number) => void;
+}) {
+  if (!isOpen || !pharmacy) return null;
+
+  const shopLat = pharmacy.latitude || pharmacy.lat || 19.0760;
+  const shopLng = pharmacy.longitude || pharmacy.lng || 72.8777;
+  const unitPrice = pharmacy.price || 0;
+  const totalPrice = unitPrice * quantity;
+
+  return (
+    <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-100">
+        {/* Top Header */}
+        <div className="p-5 sm:p-6 bg-[#1E3A2F] text-white flex justify-between items-center shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 bg-white/10 rounded-2xl flex items-center justify-center text-emerald-300">
+              <Store size={22} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-lg sm:text-xl font-bold tracking-tight">{pharmacy.name}</h2>
+                <span className="bg-emerald-400/20 text-emerald-300 text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  Store Route & Distance
+                </span>
+              </div>
+              <p className="text-xs text-emerald-100/70 mt-0.5">
+                {medicine?.name ? `Ordering: ${medicine.name}` : "Medical Shop Order Route"} • {pharmacy.location || "Mumbai, MH"}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white p-2 rounded-full hover:bg-white/10 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Prominent Distance & Route Notice (Requirement 4 & 7) */}
+        <div className="bg-[#EBF5EF] border-b border-[#D2E9DA] px-5 sm:px-6 py-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-[#1E3A2F] text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Navigation size={15} />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-black text-[#1E3A2F]">
+                This medical shop is approximately {distanceKm.toFixed(1)} km away from your location.
+              </p>
+              <p className="text-[11px] text-slate-600 font-medium">
+                Estimated travel/delivery distance: {distanceKm.toFixed(1)} km (~{estimatedTimeMins} mins rider transit)
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <span className="text-[11px] font-black text-emerald-800 bg-white px-3 py-1 rounded-xl border border-[#C2E2CC] shadow-sm">
+              Live Route Preview
+            </span>
+          </div>
+        </div>
+
+        {/* Body: 2 Columns on Desktop, Stacked on Mobile */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* Left Col: Shop Selector, Delivery Location Selector, Order details */}
+          <div className="lg:col-span-5 space-y-5">
+            {/* If multiple shops available, allow switching (Requirement 9 & 10) */}
+            {availablePharmacies.length > 1 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                  Compare Other Available Medical Shops ({availablePharmacies.length})
+                </p>
+                <div className="space-y-2 max-h-36 overflow-y-auto pr-1 custom-scrollbar">
+                  {availablePharmacies.map((p: any) => {
+                    const isSelected = p.name === pharmacy.name;
+                    return (
+                      <button
+                        key={p.name}
+                        onClick={() => onSelectPharmacy(p)}
+                        className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between ${
+                          isSelected
+                            ? "border-[#1E3A2F] bg-[#F2F8F4] font-bold shadow-sm"
+                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs truncate">{p.name}</p>
+                          <p className="text-[10px] text-slate-400">{p.dist || `${(p.distValue || 1.5).toFixed(1)} km`} away</p>
+                        </div>
+                        <div className="text-right shrink-0 ml-2">
+                          <span className="text-xs font-black text-[#1E3A2F]">₹{p.price?.toFixed(2)}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Delivery Location Controls (Requirement 6 & 9) */}
+            <div className="bg-[#F8FAF9] p-4 rounded-2xl border border-slate-200 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                  <MapPin size={12} className="text-[#1E3A2F]" /> Your Delivery Location
+                </span>
+                {geoDenied && (
+                  <span className="text-[9px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-md">
+                    GPS Denied
+                  </span>
+                )}
+              </div>
+
+              {/* Address Selector Options */}
+              <div className="space-y-2">
+                {userAddresses.length > 0 && (
+                  <div>
+                    <label className="text-[10px] text-slate-400 font-bold block mb-1">Select Saved Address</label>
+                    <select
+                      value={selectedAddressId}
+                      onChange={(e) => onSelectAddressId(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-[#1E3A2F]"
+                    >
+                      <option value="">-- Use GPS / Selected Area --</option>
+                      {userAddresses.map((addr) => (
+                        <option key={addr.id} value={addr.id}>
+                          {addr.label}: {addr.address}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div>
+                  <label className="text-[10px] text-slate-400 font-bold block mb-1">
+                    {userAddresses.length > 0 ? "Or Choose Neighborhood / Area" : "Select Your Area / Delivery Location"}
+                  </label>
+                  <select
+                    value={selectedPresetArea}
+                    onChange={(e) => onSelectPresetArea(e.target.value)}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-medium focus:ring-1 focus:ring-[#1E3A2F]"
+                  >
+                    <option value="">-- Current Location (GPS) --</option>
+                    {PRESET_DELIVERY_AREAS.map((area) => (
+                      <option key={area.label} value={area.label}>
+                        {area.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-500 bg-white p-2.5 rounded-xl border border-slate-100 flex items-start gap-1.5 leading-snug">
+                <span className="text-[#1E3A2F] font-bold">Selected:</span> {customerCoords.label}
+              </p>
+            </div>
+
+            {/* Quantity and Pricing */}
+            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-slate-700">Quantity</span>
+                <div className="flex items-center gap-2.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1">
+                  <button
+                    onClick={() => onQuantityChange(Math.max(1, quantity - 1))}
+                    className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-slate-900 rounded hover:bg-slate-100"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <span className="font-bold text-sm w-5 text-center">{quantity}</span>
+                  <button
+                    onClick={() => onQuantityChange(quantity + 1)}
+                    className="w-6 h-6 flex items-center justify-center text-[#1E3A2F] rounded hover:bg-emerald-50"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-200">
+                <span>Price per unit</span>
+                <span className="font-semibold text-slate-800">₹{unitPrice.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-slate-200">
+                <span>Total Amount</span>
+                <span className="text-[#1E3A2F] text-base">₹{totalPrice.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Col: Interactive Route Map */}
+          <div className="lg:col-span-7 flex flex-col space-y-3">
+            <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <MapIcon size={14} className="text-[#1E3A2F]" /> Live Route & Medical Shop Location
+              </span>
+              <span className="text-[10px] text-slate-400 font-medium">
+                Shop: [{shopLat.toFixed(4)}, {shopLng.toFixed(4)}]
+              </span>
+            </div>
+
+            <div className="h-[280px] sm:h-[340px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner relative">
+              <LeafletMap
+                lat={customerCoords.lat}
+                lng={customerCoords.lng}
+                zoom={13}
+                title={customerCoords.label}
+                customerLocation={{ lat: customerCoords.lat, lng: customerCoords.lng, title: customerCoords.label }}
+                shopLocation={{
+                  lat: shopLat,
+                  lng: shopLng,
+                  name: pharmacy.name,
+                  address: pharmacy.location,
+                  price: pharmacy.price,
+                }}
+                showRoute={true}
+              />
+            </div>
+
+            {/* Map legend */}
+            <div className="flex items-center justify-between text-[10px] text-slate-500 bg-slate-50 px-3 py-2 rounded-xl border border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block" />
+                <span>Your Location</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block" />
+                <span>{pharmacy.name}</span>
+              </div>
+              <div className="flex items-center gap-1.5 font-bold text-slate-700">
+                <Clock size={11} className="text-[#1E3A2F]" /> ~{estimatedTimeMins} mins
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal Action Footer */}
+        <div className="p-4 sm:p-5 bg-slate-50 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-500 text-center sm:text-left">
+            Ordering from <span className="font-bold text-slate-800">{pharmacy.name}</span> ({distanceKm.toFixed(1)} km away)
+          </div>
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <button
+              onClick={onClose}
+              className="flex-1 sm:flex-initial px-5 py-3 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-100 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={() => onProceedToOrder(pharmacy, quantity)}
+              className="flex-1 sm:flex-initial bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-3 rounded-xl font-bold text-xs shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={15} /> Continue to Order — ₹{totalPrice.toFixed(2)}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatApiError(detail: any, fallback: string = "Request failed"): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: any) => {
+        if (typeof item === "string") return item;
+        if (item && item.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+          const cleanMsg = item.msg.replace(/^Value error,\s*/i, "");
+          return field && field !== "body"
+            ? `${field.charAt(0).toUpperCase() + field.slice(1)}: ${cleanMsg}`
+            : cleanMsg;
+        }
+        return JSON.stringify(item);
+      })
+      .join(". ");
+  }
+  if (typeof detail === "object") {
+    return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 // ─── Login Modal ──────────────────────────────────────────────────
-function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onSuccess: (u: AuthUser) => void; onSwitch: () => void }) {
-  const [email, setEmail] = useState("");
+function LoginModal({ 
+  onClose, 
+  onSuccess, 
+  onSwitch, 
+  onForgotPassword,
+  initialRole = "user",
+  initialEmail = "",
+}: { 
+  onClose: () => void; 
+  onSuccess: (u: AuthUser, token?: string) => void; 
+  onSwitch: (r: "user" | "shop_owner" | "rider") => void; 
+  onForgotPassword?: (r: "user" | "shop_owner" | "rider", email: string) => void;
+  initialRole?: "user" | "shop_owner" | "rider";
+  initialEmail?: string;
+}) {
+  const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
-  const [role, setRole] = useState<"user" | "shop_owner" | "rider">("user");
+  const [role, setRole] = useState<"user" | "shop_owner" | "rider">(initialRole);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (initialRole) setRole(initialRole);
+  }, [initialRole]);
+
+  useEffect(() => {
+    if (initialEmail) setEmail(initialEmail);
+  }, [initialEmail]);
 
   useEffect(() => {
     if (email === "demo@medstore.com") setRole("user");
@@ -176,13 +608,12 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, role }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || "Login failed");
-      localStorage.setItem("medifind_user", JSON.stringify(data.user));
-      if (data.token) localStorage.setItem("medifind_token", data.token);
-      onSuccess(data.user);
+      if (!res.ok) throw new Error(formatApiError(data.detail || data.error, "Login failed"));
+      saveAuthSession(data.user, data.token);
+      onSuccess(data.user, data.token);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -201,7 +632,7 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
 
         <div className="flex gap-2 mb-6">
           {(["user", "shop_owner", "rider"] as const).map(r => (
-            <button key={r} onClick={() => setRole(r)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${role === r ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 text-slate-400"}`}>
+            <button key={r} type="button" onClick={() => setRole(r)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${role === r ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 text-slate-400"}`}>
               {r.replace("_", " ")}
             </button>
           ))}
@@ -214,7 +645,18 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50" required />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">Password</label>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-sm font-semibold text-slate-700">Password</label>
+              {onForgotPassword && (
+                <button
+                  type="button"
+                  onClick={() => onForgotPassword(role, email)}
+                  className="text-xs font-bold text-[#1E3A2F] hover:underline"
+                >
+                  Forgot Password?
+                </button>
+              )}
+            </div>
             <div className="relative">
               <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50" required />
               <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">{showPw ? <EyeOff size={16} /> : <Eye size={16} />}</button>
@@ -226,20 +668,217 @@ function LoginModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onS
         </form>
         <div className="mt-4 text-center text-sm">
           <span className="text-slate-500">Don't have an account? </span>
-          <button onClick={onSwitch} className="text-[#1E3A2F] font-semibold hover:underline">Sign up</button>
+          <button type="button" onClick={() => onSwitch(role)} className="text-[#1E3A2F] font-semibold hover:underline">Sign up</button>
         </div>
       </div>
     </div>
   );
 }
 
+// ─── Forgot Password Modal ─────────────────────────────────────────
+function ForgotPasswordModal({
+  onClose,
+  initialRole = "user",
+  initialEmail = "",
+  onBackToLogin,
+}: {
+  onClose: () => void;
+  initialRole?: "user" | "shop_owner" | "rider";
+  initialEmail?: string;
+  onBackToLogin: (r: "user" | "shop_owner" | "rider", email?: string) => void;
+}) {
+  const [role, setRole] = useState<"user" | "shop_owner" | "rider">(initialRole);
+  const [email, setEmail] = useState(initialEmail);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+
+  useEffect(() => {
+    if (initialRole) setRole(initialRole);
+    if (initialEmail) setEmail(initialEmail);
+  }, [initialRole, initialEmail]);
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setSuccessMessage("");
+
+    if (!email.trim()) {
+      setError("Please enter your registered email address.");
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError("Passwords do not match. Please re-enter.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), newPassword, role }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(formatApiError(data.detail || data.error, "Password reset failed"));
+      setSuccessMessage(data.message || "Password successfully reset! You can now log in.");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative animate-in fade-in zoom-in-95 duration-200">
+        <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
+        
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-[#1E3A2F] rounded-xl flex items-center justify-center text-white">
+            <KeyRound size={20} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">Reset Password</h2>
+            <p className="text-xs text-slate-500">Choose a new password for your account</p>
+          </div>
+        </div>
+
+        {/* Role Selector */}
+        <div className="flex gap-2 mb-6">
+          {(["user", "shop_owner", "rider"] as const).map(r => (
+            <button
+              key={r}
+              type="button"
+              onClick={() => { setRole(r); setError(""); }}
+              className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                role === r ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 text-slate-400"
+              }`}
+            >
+              {r.replace("_", " ")}
+            </button>
+          ))}
+        </div>
+
+        {error && (
+          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-semibold">
+            {error}
+          </div>
+        )}
+
+        {successMessage ? (
+          <div className="space-y-4 py-2 text-center animate-in fade-in">
+            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-100">
+              <CheckCircle size={28} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-900">Password Reset Complete</h3>
+              <p className="text-xs text-slate-600 mt-1 max-w-xs mx-auto">{successMessage}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onBackToLogin(role, email)}
+              className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+            >
+              Sign In Now <ArrowRight size={15} />
+            </button>
+          </div>
+        ) : (
+          <form onSubmit={handleReset} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Registered Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@email.com"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">New Password</label>
+              <div className="relative">
+                <input
+                  type={showPw ? "text" : "password"}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="Min 6 characters"
+                  className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(!showPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Confirm New Password</label>
+              <input
+                type={showPw ? "text" : "password"}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Repeat new password"
+                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
+                required
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3 rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-60 shadow-md"
+            >
+              {loading ? "Updating Password..." : "Reset Password"}
+            </button>
+            <div className="mt-4 text-center text-sm">
+              <button
+                type="button"
+                onClick={() => onBackToLogin(role, email)}
+                className="text-[#1E3A2F] font-semibold hover:underline flex items-center justify-center gap-1 mx-auto"
+              >
+                ← Back to Sign In
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
 // ─── Signup Modal ─────────────────────────────────────────────────
-function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; onSuccess: (u: AuthUser) => void; onSwitch: () => void }) {
-  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", location: "", role: "user" });
+function SignupModal({ 
+  onClose, 
+  onSuccess, 
+  onSwitch, 
+  initialRole = "user" 
+}: { 
+  onClose: () => void; 
+  onSuccess: (u: AuthUser, token?: string) => void; 
+  onSwitch: (r: "user" | "shop_owner" | "rider") => void; 
+  initialRole?: "user" | "shop_owner" | "rider" 
+}) {
+  const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", location: "", role: initialRole });
   const [showPw, setShowPw] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    if (initialRole) set("role", initialRole);
+  }, [initialRole]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -249,10 +888,9 @@ function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; on
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || "Signup failed");
-      localStorage.setItem("medifind_user", JSON.stringify(data.user));
-      if (data.token) localStorage.setItem("medifind_token", data.token);
-      onSuccess(data.user);
+      if (!res.ok) throw new Error(formatApiError(data.detail || data.error, "Signup failed"));
+      saveAuthSession(data.user, data.token);
+      onSuccess(data.user, data.token);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -316,7 +954,7 @@ function SignupModal({ onClose, onSuccess, onSwitch }: { onClose: () => void; on
         </form>
         <div className="mt-4 text-center text-sm">
           <span className="text-slate-500">Already have an account? </span>
-          <button onClick={onSwitch} className="text-[#1E3A2F] font-semibold hover:underline">Sign in</button>
+          <button type="button" onClick={() => onSwitch(form.role as any)} className="text-[#1E3A2F] font-semibold hover:underline">Sign in</button>
         </div>
       </div>
     </div>
@@ -329,6 +967,9 @@ export default function Home() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [authModalRole, setAuthModalRole] = useState<"user" | "shop_owner" | "rider">("user");
+  const [authModalEmail, setAuthModalEmail] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [searchInput, setSearchInput] = useState("");
@@ -362,6 +1003,12 @@ export default function Home() {
   const [isEmergencyMode, setIsEmergencyMode] = useState(false);
   const [showEmergencyModal, setShowEmergencyModal] = useState(false);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [selectedPresetArea, setSelectedPresetArea] = useState<string>("");
+  const [geoDenied, setGeoDenied] = useState<boolean>(false);
+  const [isRouteModalOpen, setIsRouteModalOpen] = useState<boolean>(false);
+  const [routeModalPharmacy, setRouteModalPharmacy] = useState<any>(null);
+  const [routeModalMedicine, setRouteModalMedicine] = useState<any>(null);
+  const [routeModalQuantity, setRouteModalQuantity] = useState<number>(1);
   const [paymentMethod, setPaymentMethod] = useState<"ONLINE" | "CASH_ON_DELIVERY">("CASH_ON_DELIVERY");
   const [userAddresses, setUserAddresses] = useState<UserAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
@@ -375,18 +1022,49 @@ export default function Home() {
   useEffect(() => {
     if (typeof window !== "undefined" && navigator.geolocation) {
       const watchId = navigator.geolocation.watchPosition(
-        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => console.log("Geo error:", err),
-        { enableHighAccuracy: true }
+        (pos) => {
+          setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setGeoDenied(false);
+        },
+        (err) => {
+          console.log("Geo error:", err);
+          setGeoDenied(true);
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
       );
       return () => navigator.geolocation.clearWatch(watchId);
+    } else {
+      setGeoDenied(true);
     }
   }, []);
+
+  const getCustomerCoords = useCallback((): { lat: number; lng: number; label: string } => {
+    if (selectedAddressId) {
+      const addr = userAddresses.find(a => a.id === selectedAddressId);
+      if (addr) {
+        return {
+          lat: addr.latitude || (userLocation?.lat || 19.0760),
+          lng: addr.longitude || (userLocation?.lng || 72.8777),
+          label: `${addr.label}: ${addr.address}`
+        };
+      }
+    }
+    if (selectedPresetArea) {
+      const preset = PRESET_DELIVERY_AREAS.find(a => a.label === selectedPresetArea);
+      if (preset) return { lat: preset.lat, lng: preset.lng, label: preset.label };
+    }
+    if (userLocation) {
+      return { lat: userLocation.lat, lng: userLocation.lng, label: "Current GPS Location" };
+    }
+    return { lat: 19.0760, lng: 72.8777, label: "Default Location (Mumbai, MH)" };
+  }, [selectedAddressId, userAddresses, selectedPresetArea, userLocation]);
+
+  const customerCoords = getCustomerCoords();
 
   // Fetch addresses
   const fetchAddresses = useCallback(async (uid: string) => {
     try {
-      const res = await fetch(`/api/user/address?userId=${uid}`);
+      const res = await fetch(`/api/user/address?userId=${uid}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.addresses) {
         setUserAddresses(data.addresses);
@@ -425,7 +1103,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/user/address", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           userId: user.id,
           ...newAddress,
@@ -443,50 +1121,47 @@ export default function Home() {
   const [showOrderSuccess, setShowOrderSuccess] = useState(false);
 
   useEffect(() => {
-    const activeRole = localStorage.getItem("medifind_active_role");
-    const stored = activeRole ? localStorage.getItem(`medifind_user_${activeRole}`) : localStorage.getItem("medifind_user");
-    
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setUser(parsed);
-        if (parsed.role === "shop_owner") {
-          window.location.replace("/dashboard/shop");
-          return;
-        } else if (parsed.role === "rider") {
-          window.location.replace("/dashboard/rider");
-          return;
-        }
-      } catch (e) {
-        console.error("Session restore failed:", e);
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const authParam = params.get("auth");
+      const roleParam = params.get("role") as "user" | "shop_owner" | "rider" | null;
+      if (roleParam && ["user", "shop_owner", "rider"].includes(roleParam)) {
+        setAuthModalRole(roleParam);
+      }
+      if (authParam === "login") {
+        setShowLogin(true);
+        setShowSignup(false);
+      } else if (authParam === "signup") {
+        setShowSignup(true);
+        setShowLogin(false);
+      }
+    }
+
+    const storedUser = getStoredUser();
+    if (storedUser) {
+      setUser(storedUser);
+      if (storedUser.role === "shop_owner") {
+        window.location.replace("/dashboard/shop");
+        return;
+      } else if (storedUser.role === "rider") {
+        window.location.replace("/dashboard/rider");
+        return;
       }
     }
     setIsAuthChecking(false);
   }, []);
 
-  const handleAuthSuccess = (u: AuthUser) => {
+  const handleAuthSuccess = (u: AuthUser, token?: string) => {
     setUser(u);
     setShowLogin(false);
     setShowSignup(false);
-    localStorage.setItem(`medifind_user_${u.role}`, JSON.stringify(u));
-    localStorage.setItem("medifind_active_role", u.role);
-    
-    if (u.role === "shop_owner") {
-      window.location.href = "/dashboard/shop";
-    } else if (u.role === "rider") {
-      window.location.href = "/dashboard/rider";
-    } else {
-      window.location.href = "/dashboard/user";
-    }
+    saveAuthSession(u, token);
+    const target = getDashboardUrl(u.role);
+    window.location.replace(target);
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("medifind_user");
-    localStorage.removeItem("medifind_role");
-    localStorage.removeItem("medifind_active_role");
-    localStorage.removeItem("medifind_user_user");
-    localStorage.removeItem("medifind_user_shop_owner");
-    localStorage.removeItem("medifind_user_rider");
+    clearAuthSession();
     setUser(null);
   };
 
@@ -518,7 +1193,7 @@ export default function Home() {
   const fetchLoyalty = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await fetch(`/api/loyalty?email=${user.email}`);
+      const res = await fetch(`/api/loyalty?email=${user.email}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.loyaltyPoints !== undefined) setLoyaltyPoints(data.loyaltyPoints);
     } catch {}
@@ -555,7 +1230,7 @@ export default function Home() {
     setIsOrdering(true);
     try {
       const res = await fetch("/api/orders", {
-        method: "POST", headers: { "Content-Type": "application/json" },
+        method: "POST", headers: getAuthHeaders(),
         body: JSON.stringify({
           email: user.email,
           userId: user.id,
@@ -658,7 +1333,7 @@ export default function Home() {
       const activeId = localStorage.getItem("medifind_active_order_id");
       if (activeId && user) {
         try {
-          const res = await fetch(`/api/orders?email=${user.email}`);
+          const res = await fetch(`/api/orders?email=${user.email}`, { headers: getAuthHeaders() });
           const data = await res.json();
           const activeOrder = data.orders.find((o: any) => o.id === activeId || o.realId === activeId);
           if (activeOrder) {
@@ -688,7 +1363,9 @@ export default function Home() {
     inventory.reduce((map, inv: any) => {
       if (!map.has(inv.pharmacy.name)) {
         const predefined = NEARBY_PHARMACIES.find(p => p.name === inv.pharmacy.name);
-        const distance = (inv.pharmacy.distance && inv.pharmacy.distance !== 0) ? inv.pharmacy.distance : (predefined ? (parseFloat(predefined.dist) || 1.2) : 1.5);
+        const shopLat = (inv.pharmacy.latitude && inv.pharmacy.latitude !== 0) ? inv.pharmacy.latitude : (predefined ? predefined.lat : 19.0760);
+        const shopLng = (inv.pharmacy.longitude && inv.pharmacy.longitude !== 0) ? inv.pharmacy.longitude : (predefined ? predefined.lng : 72.8777);
+        const distance = calculateDistanceKm(customerCoords.lat, customerCoords.lng, shopLat, shopLng);
         const isAvailable = inv.pharmacy.isAvailable !== undefined ? inv.pharmacy.isAvailable : true;
         const openingTime = inv.pharmacy.openingTime || "9:00 AM";
         const closingTime = inv.pharmacy.closingTime || "9:00 PM";
@@ -699,32 +1376,51 @@ export default function Home() {
           name: inv.pharmacy.name,
           rating: (4.0 + Math.random() * 0.9).toFixed(1),
           reviews: "(120+)",
-          location: predefined ? "Mumbai, MH" : (inv.pharmacy.location || "Nearby"),
+          location: inv.pharmacy.location || (predefined ? "Mumbai, MH" : "Nearby"),
           dist: `${distance.toFixed(1)} km`,
           distValue: distance,
-          timeValue: Math.round(distance * 12 + 5),
-          time: `${Math.round(distance * 12 + 5)} min`,
+          timeValue: Math.max(10, Math.round(distance * 8 + 6)),
+          time: `${Math.max(10, Math.round(distance * 8 + 6))} min`,
           open: predefined ? predefined.open : openLabel,
           isAvailable,
           badge: predefined ? predefined.badge : (isAvailable ? null : "Closed"),
-          lat: (inv.pharmacy.latitude && inv.pharmacy.latitude !== 0) ? inv.pharmacy.latitude : (predefined ? predefined.lat : 19.0760),
-          lng: (inv.pharmacy.longitude && inv.pharmacy.longitude !== 0) ? inv.pharmacy.longitude : (predefined ? predefined.lng : 72.8777),
+          lat: shopLat,
+          lng: shopLng,
+          latitude: shopLat,
+          longitude: shopLng,
           price: inv.price,
+          inventoryId: inv.id,
+          stock: inv.stock || 50,
         });
       }
       return map;
     }, new Map<string, any>()).values()
   ).sort((a: any, b: any) => a.distValue - b.distValue);
 
-  const nearbyPharmacies = (displayPharmacies.length > 0 ? displayPharmacies : NEARBY_PHARMACIES.map(p => ({
-    ...p,
-    rating: "4.5",
-    reviews: "(120+)",
-    location: "Mumbai, MH",
-    distValue: parseFloat(p.dist) || 1.2,
-    time: "12 min",
-    timeValue: 12
-  }))) as PharmacyMarker[];
+  const nearbyPharmacies = (displayPharmacies.length > 0 ? displayPharmacies : NEARBY_PHARMACIES.map(p => {
+    const dist = calculateDistanceKm(customerCoords.lat, customerCoords.lng, p.lat, p.lng);
+    const estTime = Math.max(10, Math.round(dist * 8 + 6));
+    return {
+      ...p,
+      rating: "4.5",
+      reviews: "(120+)",
+      location: "Mumbai, MH",
+      distValue: dist,
+      dist: `${dist.toFixed(1)} km`,
+      time: `${estTime} min`,
+      timeValue: estTime
+    };
+  })) as PharmacyMarker[];
+
+  const cartPharmacy = cart[0]?.inventory?.pharmacy || bestOption?.pharmacy;
+  const cartPharmacyLat = cartPharmacy?.latitude || cartPharmacy?.lat || 19.0760;
+  const cartPharmacyLng = cartPharmacy?.longitude || cartPharmacy?.lng || 72.8777;
+  const cartPharmacyDistance = calculateDistanceKm(customerCoords.lat, customerCoords.lng, cartPharmacyLat, cartPharmacyLng);
+
+  const modalShopLat = routeModalPharmacy?.latitude || routeModalPharmacy?.lat || 19.0760;
+  const modalShopLng = routeModalPharmacy?.longitude || routeModalPharmacy?.lng || 72.8777;
+  const modalDistanceKm = calculateDistanceKm(customerCoords.lat, customerCoords.lng, modalShopLat, modalShopLng);
+  const modalEstimatedMins = Math.max(10, Math.round(modalDistanceKm * 8 + 6));
 
   if (isAuthChecking) {
     return (
@@ -803,8 +1499,50 @@ export default function Home() {
         </div>
       )}
 
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} onSuccess={handleAuthSuccess} onSwitch={() => { setShowLogin(false); setShowSignup(true); }} />}
-      {showSignup && <SignupModal onClose={() => setShowSignup(false)} onSuccess={handleAuthSuccess} onSwitch={() => { setShowSignup(false); setShowLogin(true); }} />}
+      {showLogin && (
+        <LoginModal 
+          initialRole={authModalRole}
+          initialEmail={authModalEmail}
+          onClose={() => setShowLogin(false)} 
+          onSuccess={handleAuthSuccess} 
+          onForgotPassword={(r, em) => {
+            setAuthModalRole(r);
+            if (em) setAuthModalEmail(em);
+            setShowLogin(false);
+            setShowForgotPassword(true);
+          }}
+          onSwitch={(r) => { 
+            setAuthModalRole(r);
+            setShowLogin(false); 
+            setShowSignup(true); 
+          }} 
+        />
+      )}
+      {showForgotPassword && (
+        <ForgotPasswordModal
+          initialRole={authModalRole}
+          initialEmail={authModalEmail}
+          onClose={() => setShowForgotPassword(false)}
+          onBackToLogin={(r, em) => {
+            setAuthModalRole(r);
+            if (em) setAuthModalEmail(em);
+            setShowForgotPassword(false);
+            setShowLogin(true);
+          }}
+        />
+      )}
+      {showSignup && (
+        <SignupModal 
+          initialRole={authModalRole}
+          onClose={() => setShowSignup(false)} 
+          onSuccess={handleAuthSuccess} 
+          onSwitch={(r) => { 
+            setAuthModalRole(r);
+            setShowSignup(false); 
+            setShowLogin(true); 
+          }} 
+        />
+      )}
 
       {/* ── EMERGENCY MODE MODAL ── */}
       {showEmergencyModal && (
@@ -852,7 +1590,7 @@ export default function Home() {
             <div className="hidden md:flex items-center gap-8 text-sm font-semibold tracking-tight text-slate-700">
               <a href="#categories" className="hover:text-[#1E3A2F] transition-colors">Treatments</a>
               <a href="#search" className="hover:text-[#1E3A2F] transition-colors">Search Medicines</a>
-              <a href="#nearby" className="hover:text-[#1E3A2F] transition-colors">Nearby Pharmacies</a>
+              <a href="#pharmacies" className="hover:text-[#1E3A2F] transition-colors">Compare Pharmacies</a>
               <a href="#ai" className="hover:text-[#1E3A2F] transition-colors">AI Health</a>
             </div>
 
@@ -883,12 +1621,18 @@ export default function Home() {
                   )}
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3">
                   <button 
-                    onClick={() => setShowLogin(true)} 
-                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                    onClick={() => { setAuthModalRole("user"); setShowLogin(true); }} 
+                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-4 sm:px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
                   >
-                    ACCOUNT
+                    Account
+                  </button>
+                  <button 
+                    onClick={() => { setAuthModalRole("shop_owner"); setShowLogin(true); }} 
+                    className="hidden sm:flex items-center gap-1.5 bg-[#1E3A2F] text-white hover:bg-[#152a22] px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm"
+                  >
+                    <Store size={13} /> Pharmacy Partner
                   </button>
                 </div>
               )}
@@ -1010,10 +1754,23 @@ export default function Home() {
                     {hasDiscount && <div className="flex justify-between text-emerald-700 font-medium"><span className="flex items-center gap-1"><Gift size={13} /> Bulk discount</span><span>-₹{discountAmt.toFixed(2)}</span></div>}
                     <div className="flex justify-between font-black text-base border-t pt-2"><span>Total</span><span className="text-[#1E3A2F]">₹{finalTotal.toFixed(2)}</span></div>
                   </div>
-                  <button onClick={() => addToCart(bestOption, selectedMedicine, quantity)}
-                    className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-xl font-bold text-sm transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg">
-                    <ShoppingCart size={17} /> Add to Cart
-                  </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      onClick={() => {
+                        setRouteModalPharmacy(bestOption.pharmacy);
+                        setRouteModalMedicine(selectedMedicine);
+                        setRouteModalQuantity(quantity);
+                        setIsRouteModalOpen(true);
+                      }}
+                      className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-[#1E3A2F] py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <MapIcon size={16} /> View Route & Map
+                    </button>
+                    <button onClick={() => addToCart(bestOption, selectedMedicine, quantity)}
+                      className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg">
+                      <ShoppingCart size={16} /> Add to Cart
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -1029,6 +1786,131 @@ export default function Home() {
               <p className="text-slate-400 text-sm mt-1">Try a different search term.</p>
             </div>
           ) : null}
+
+          {/* ── ALL AVAILABLE MEDICAL SHOPS COMPARISON (Requirements 2, 7, 8, 10) ── */}
+          {selectedMedicine && displayPharmacies.length > 0 && (
+            <div id="pharmacies" className="bg-white rounded-[32px] p-6 sm:p-8 shadow-xl border border-slate-100 space-y-6 animate-in fade-in duration-500">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+                <div>
+                  <div className="inline-flex items-center gap-2 bg-[#E8F3ED] text-[#1E3A2F] px-3.5 py-1 rounded-full text-xs font-bold mb-2">
+                    <Store size={13} /> AVAILABLE IN {displayPharmacies.length} MEDICAL SHOPS
+                  </div>
+                  <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                    Available Medical Shops for {selectedMedicine.name}
+                  </h3>
+                  <p className="text-slate-500 text-sm">
+                    Compare distance, live pricing, and delivery times to select the best medical shop for your order.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 bg-[#F6FAF7] px-4 py-2 rounded-2xl border border-slate-100 shrink-0">
+                  <MapPin size={15} className="text-[#1E3A2F]" />
+                  <span className="text-xs font-bold text-slate-700">
+                    Your location: <span className="text-[#1E3A2F]">{customerCoords.label}</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayPharmacies.map((p: any, idx: number) => {
+                  const isBestPrice = idx === 0 || p.price === Math.min(...displayPharmacies.map((x: any) => x.price));
+                  const isNearest = p.distValue === Math.min(...displayPharmacies.map((x: any) => x.distValue || 999));
+                  const estTime = p.time || `${Math.max(10, Math.round((p.distValue || 1.5) * 8 + 6))} min`;
+
+                  return (
+                    <div
+                      key={`${p.name}-${idx}`}
+                      className={`rounded-2xl p-5 border-2 transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
+                        isBestPrice ? "border-emerald-300 bg-[#F9FCFA]" : "border-slate-100 bg-white hover:border-[#1E3A2F]/20"
+                      }`}
+                    >
+                      <div>
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-11 h-11 rounded-xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center font-black text-lg shrink-0">
+                              {p.name[0]}
+                            </div>
+                            <div>
+                              <h4 className="font-black text-slate-900 text-sm">{p.name}</h4>
+                              <p className="text-[11px] text-slate-400 flex items-center gap-1">
+                                <MapPin size={10} /> {p.location || "Mumbai, MH"}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {isBestPrice && (
+                              <span className="text-[9px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                Best Price
+                              </span>
+                            )}
+                            {isNearest && (
+                              <span className="text-[9px] font-black bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full uppercase tracking-tighter">
+                                Nearest
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Distance and timing badges */}
+                        <div className="flex items-center gap-2 mb-4">
+                          <span className="text-[11px] font-black text-[#1E3A2F] bg-[#E8F3ED] px-2.5 py-1 rounded-lg flex items-center gap-1">
+                            <Navigation size={11} /> {p.dist} away
+                          </span>
+                          <span className="text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                            <Clock size={11} /> ~{estTime}
+                          </span>
+                        </div>
+
+                        {/* Price and status */}
+                        <div className="flex justify-between items-center py-3 border-y border-slate-100 mb-4">
+                          <div>
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Unit Price</span>
+                            <span className="text-2xl font-black text-[#1E3A2F]">₹{p.price.toFixed(2)}</span>
+                          </div>
+                          <div className="text-right">
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${p.isAvailable === false ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
+                              {p.open || "Open Now"}
+                            </span>
+                            <div className="flex items-center gap-1 mt-1 justify-end text-[11px] text-amber-500 font-bold">
+                              <Star size={11} fill="currentColor" /> {p.rating || "4.5"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="grid grid-cols-2 gap-2 mt-2">
+                        <button
+                          onClick={() => {
+                            setRouteModalPharmacy(p);
+                            setRouteModalMedicine(selectedMedicine);
+                            setRouteModalQuantity(quantity);
+                            setIsRouteModalOpen(true);
+                          }}
+                          className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          <MapIcon size={13} className="text-[#1E3A2F]" /> View Route
+                        </button>
+                        <button
+                          onClick={() => {
+                            const inv = inventory.find((i: any) => i.pharmacy?.name === p.name) || {
+                              id: p.inventoryId || `temp-${p.name}`,
+                              price: p.price,
+                              stock: p.stock || 50,
+                              pharmacy: p
+                            };
+                            addToCart(inv, selectedMedicine, quantity);
+                          }}
+                          className="bg-[#1E3A2F] hover:bg-[#152a22] text-white py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          <ShoppingCart size={13} /> Order Now
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Matching Medicines */}
           {medicines.length > 0 && (
@@ -1428,15 +2310,16 @@ export default function Home() {
                                     </div>
                                     <button
                                       onClick={() => {
-                                        // Update state with medicine selection to load live local map details
                                         const mockMed = { id: p.medicineId, name: p.name, description: p.generalUse, category: p.category };
                                         setSelectedMedicine(mockMed);
                                         fetchInventory(p.medicineId);
-                                        document.getElementById("nearby")?.scrollIntoView({ behavior: "smooth" });
+                                        setRouteModalMedicine(mockMed);
+                                        if (nearbyPharmacies.length > 0) setRouteModalPharmacy(nearbyPharmacies[0]);
+                                        setIsRouteModalOpen(true);
                                       }}
                                       className="bg-emerald-400 hover:bg-emerald-300 text-black text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider flex items-center gap-0.5"
                                     >
-                                      Map & Route <ArrowRight size={10} />
+                                      View Route & Order <ArrowRight size={10} />
                                     </button>
                                   </div>
                                 </div>
@@ -1470,89 +2353,64 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── NEARBY PHARMACIES MAP & ROUTING ── */}
-        <div id="nearby" className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-6">
-          <div className="lg:col-span-2 space-y-4">
-            <div className="flex justify-between items-center">
+        {/* ── VERIFIED NEIGHBORHOOD PHARMACIES (Clean, Contextual, No Permanent Map) ── */}
+        {!selectedMedicine && (
+          <div id="pharmacies" className="bg-white rounded-[32px] p-6 sm:p-10 shadow-lg border border-slate-100 space-y-6">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-100 pb-5">
               <div>
-                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Live Local Map</h3>
-                <p className="text-slate-500 text-sm">Nearby pharmacies stocking {selectedMedicine?.name || "your medicine"}</p>
+                <span className="text-[10px] font-black tracking-widest text-[#1E3A2F] uppercase bg-[#E8F3ED] px-3 py-1 rounded-full inline-block mb-2">
+                  Partner Pharmacies
+                </span>
+                <h3 className="text-2xl font-black text-slate-900 tracking-tight">Verified Neighborhood Pharmacies</h3>
+                <p className="text-slate-500 text-sm">Real-time inventory and delivery from registered medical stores in your area</p>
+              </div>
+              <div className="flex items-center gap-2 bg-[#F6FAF7] px-4 py-2 rounded-2xl border border-slate-100">
+                <MapPin size={14} className="text-[#1E3A2F]" />
+                <span className="text-xs font-bold text-slate-700">{customerCoords.label}</span>
               </div>
             </div>
 
-            <div className="h-[420px] rounded-[32px] overflow-hidden shadow-md border border-slate-100 relative">
-              <LeafletMap 
-                lat={userLocation?.lat || 19.0760} 
-                lng={userLocation?.lng || 72.8777} 
-                zoom={13} 
-                title="Your Location"
-                focusLocation={mapFocus}
-                pharmacies={nearbyPharmacies}
-                onSelectPharmacy={(p) => setMapFocus({ lat: p.lat, lng: p.lng })}
-                userLocation={userLocation}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-4 max-h-[480px] overflow-y-auto pr-2 custom-scrollbar">
-            <h3 className="text-lg font-black text-slate-900 flex items-center gap-2 sticky top-0 bg-[#F6FAF7] py-2 z-10"><MapIcon size={18} className="text-[#1E3A2F]" /> Nearby Stores</h3>
-            {nearbyPharmacies.map((p, i) => (
-              <div key={`${p.name}-${i}`} 
-                onClick={() => setMapFocus({ lat: p.lat, lng: p.lng })}
-                className={`bg-white rounded-2xl p-4 border shadow-sm hover:shadow-md transition-all cursor-pointer group hover:-translate-y-0.5 ${p.badge ? "border-emerald-200" : "border-slate-100"}`}>
-                <div className="flex gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-[#E8F3ED] flex items-center justify-center text-[#1E3A2F] shrink-0 font-black text-xl group-hover:bg-[#1E3A2F] group-hover:text-white transition-colors">
-                    {p.name[0]}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start mb-0.5">
-                      <h4 className="font-bold text-slate-900 text-sm truncate">{p.name}</h4>
-                      {p.badge && (
-                        <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter ${p.badge === "Closed" ? "text-rose-600 bg-rose-50" : "text-[#1E3A2F] bg-[#E8F3ED]"}`}>{p.badge}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-1 mb-1.5">
-                      <div className="flex items-center gap-0.5 text-amber-500"><Star size={10} fill="currentColor" /></div>
-                      <span className="text-[10px] font-black text-slate-700">{p.rating || "4.5"}</span>
-                      <span className="text-[10px] text-slate-400 font-medium">{p.reviews || "(120+)"}</span>
-                    </div>
-                    <div className="flex items-center gap-1 text-[10px] text-slate-500 mb-1 font-medium truncate">
-                      <MapPin size={10} className="text-slate-400" /> {p.location || "Mumbai, Maharashtra"}
-                    </div>
-                    <div className="mb-2">
-                      <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${(p as any).isAvailable === false ? "bg-rose-50 text-rose-500" : "bg-emerald-50 text-emerald-700"}`}>
-                        {(p as any).open || "Open now"}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {nearbyPharmacies.map((p, i) => (
+                <div key={`${p.name}-${i}`} className="bg-slate-50 hover:bg-white rounded-2xl p-5 border border-slate-200/80 hover:border-[#1E3A2F]/30 hover:shadow-xl transition-all duration-300 flex flex-col justify-between group">
+                  <div>
+                    <div className="flex justify-between items-start mb-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[#E8F3ED] flex items-center justify-center text-[#1E3A2F] font-black text-xl group-hover:bg-[#1E3A2F] group-hover:text-white transition-colors">
+                        {p.name[0]}
+                      </div>
+                      <span className="text-[10px] font-black text-emerald-800 bg-emerald-100/60 px-2.5 py-0.5 rounded-full">
+                        {p.open || "Open Now"}
                       </span>
                     </div>
-                    <div className="flex items-center gap-4 text-[10px] font-black">
-                      <span className="flex items-center gap-1 text-[#1E3A2F] bg-[#E8F3ED] px-2 py-1 rounded-lg">
-                        <Clock size={10} /> {p.time || "12 min"}
+                    <h4 className="font-black text-slate-900 text-base mb-1">{p.name}</h4>
+                    <p className="text-xs text-slate-500 flex items-center gap-1 mb-3">
+                      <MapPin size={12} className="text-slate-400" /> {p.location || "Mumbai, Maharashtra"}
+                    </p>
+                    <div className="flex items-center gap-3 text-xs font-bold mb-4">
+                      <span className="text-[#1E3A2F] bg-[#E8F3ED] px-2.5 py-1 rounded-lg flex items-center gap-1">
+                        <Navigation size={11} /> {p.dist} away
                       </span>
-                      <span className="flex items-center gap-1 text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
-                        <MapPin size={10} /> {p.dist}
+                      <span className="text-amber-600 bg-amber-50 px-2.5 py-1 rounded-lg flex items-center gap-1">
+                        <Star size={11} fill="currentColor" /> {p.rating || "4.5"}
                       </span>
                     </div>
-                  </div>
-                </div>
-                <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
-                  <div className="text-xs text-slate-700 font-bold">
-                    {selectedMedicine?.name || "Medicine"}: <span className="text-[#1E3A2F]">₹{p.price.toFixed(2)}</span>
                   </div>
                   <button
-                    onClick={(e) => {
-                      e.preventDefault(); e.stopPropagation();
-                      document.getElementById("nearby")?.scrollIntoView({ behavior: "smooth" });
-                      setMapFocus({ lat: p.lat, lng: p.lng });
+                    onClick={() => {
+                      setRouteModalPharmacy(p);
+                      setRouteModalMedicine(null);
+                      setRouteModalQuantity(1);
+                      setIsRouteModalOpen(true);
                     }}
-                    className="text-[#1E3A2F] group-hover:text-black text-[11px] font-black flex items-center gap-0.5"
+                    className="w-full bg-white group-hover:bg-[#1E3A2F] border border-slate-200 group-hover:border-[#1E3A2F] text-slate-700 group-hover:text-white py-2.5 rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1.5 shadow-sm"
                   >
-                    Route <ChevronRight size={14} />
+                    <MapIcon size={13} /> View Route & Location
                   </button>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </main>
 
       {/* ── CART SIDEBAR ── */}
@@ -1608,6 +2466,40 @@ export default function Home() {
                       <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isEmergencyMode ? "right-1" : "left-1"}`} />
                     </button>
                   </div>
+                </div>
+
+                {/* Fulfilling Medical Shop & Route Preview (Requirements 3, 4, 7, 8) */}
+                <div className="bg-[#F0F7F3] p-3.5 rounded-2xl border border-[#D0E7D8] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-[#1E3A2F] flex items-center gap-1.5">
+                      <Store size={13} /> Fulfilling Medical Shop
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-[#C5E1CE]">
+                      {cartPharmacyDistance.toFixed(1)} km away
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold text-slate-800 truncate">
+                    {cartPharmacy?.name || "Verified Medical Shop"}
+                  </p>
+                  <p className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
+                    <MapPin size={10} /> {cartPharmacy?.location || "Mumbai, Maharashtra"}
+                  </p>
+                  <p className="text-[11px] text-[#1E3A2F] font-semibold bg-white/80 p-2 rounded-xl border border-[#D5EAE0] leading-snug">
+                    📍 This medical shop is approximately {cartPharmacyDistance.toFixed(1)} km away from your location.
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (cartPharmacy) {
+                        setRouteModalPharmacy(cartPharmacy);
+                        setRouteModalMedicine(cart[0]?.medicine || selectedMedicine);
+                        setRouteModalQuantity(cart[0]?.quantity || 1);
+                        setIsRouteModalOpen(true);
+                      }
+                    }}
+                    className="w-full bg-white hover:bg-[#E2F0E7] border border-[#BBDCC6] text-[#1E3A2F] py-2.5 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <MapIcon size={13} /> View Route on Map
+                  </button>
                 </div>
 
                 <div className="space-y-2">
@@ -1831,7 +2723,7 @@ export default function Home() {
           <div className="flex justify-center gap-8 text-xs font-bold text-emerald-200/80">
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
             <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-            <a href="#" className="hover:text-white transition-colors">Pharmacy Partners</a>
+            <a href="/?auth=login&role=shop_owner" onClick={(e) => { e.preventDefault(); setAuthModalRole("shop_owner"); setShowLogin(true); }} className="hover:text-white transition-colors">Pharmacy Partners</a>
             <a href="#" className="hover:text-white transition-colors">Contact Support</a>
           </div>
         </div>
@@ -1871,6 +2763,38 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* ── CONTEXTUAL ORDER ROUTE MAP MODAL (Requirements 3, 4, 5, 6, 7, 8, 9, 10, 11) ── */}
+      <OrderRouteMapModal
+        isOpen={isRouteModalOpen}
+        onClose={() => setIsRouteModalOpen(false)}
+        medicine={routeModalMedicine || selectedMedicine}
+        pharmacy={routeModalPharmacy || bestOption?.pharmacy}
+        availablePharmacies={displayPharmacies}
+        onSelectPharmacy={(p) => setRouteModalPharmacy(p)}
+        customerCoords={customerCoords}
+        distanceKm={modalDistanceKm}
+        estimatedTimeMins={modalEstimatedMins}
+        userAddresses={userAddresses}
+        selectedAddressId={selectedAddressId}
+        onSelectAddressId={(id) => setSelectedAddressId(id)}
+        selectedPresetArea={selectedPresetArea}
+        onSelectPresetArea={(area) => setSelectedPresetArea(area)}
+        geoDenied={geoDenied}
+        quantity={routeModalQuantity}
+        onQuantityChange={(q) => setRouteModalQuantity(q)}
+        onProceedToOrder={(pharmacy, qty) => {
+          const inv = inventory.find((i: any) => i.pharmacy?.name === pharmacy.name) || {
+            id: pharmacy.inventoryId || `temp-${pharmacy.name}`,
+            price: pharmacy.price,
+            stock: pharmacy.stock || 50,
+            pharmacy: pharmacy
+          };
+          addToCart(inv, routeModalMedicine || selectedMedicine, qty);
+          setIsRouteModalOpen(false);
+          setIsCartOpen(true);
+        }}
+      />
     </div>
   );
 }
