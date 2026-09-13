@@ -19,7 +19,9 @@ def send_password_reset_email(recipient_email: str, raw_token: str, user_name: O
     Otherwise, logs the formatted email and stores the link in the dev store.
     """
     frontend_url = get_frontend_url()
-    reset_url = f"{frontend_url}/reset-password?token={raw_token}"
+    # Updated reset URL to use path-based token routing for frontend
+    reset_url = f"{frontend_url}/reset-password/{raw_token}"
+
     name_display = user_name or "Valued User"
 
     # Record in development cache

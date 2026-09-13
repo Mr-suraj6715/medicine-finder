@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -566,21 +567,20 @@ function formatApiError(detail: any, fallback: string = "Request failed"): strin
 }
 
 // ─── Login Modal ──────────────────────────────────────────────────
-function LoginModal({ 
-  onClose, 
-  onSuccess, 
-  onSwitch, 
-  onForgotPassword,
+function LoginModal({
+  onClose,
+  onSuccess,
+  onSwitch,
   initialRole = "user",
   initialEmail = "",
-}: { 
-  onClose: () => void; 
-  onSuccess: (u: AuthUser, token?: string) => void; 
-  onSwitch: (r: "user" | "shop_owner" | "rider") => void; 
-  onForgotPassword?: (r: "user" | "shop_owner" | "rider", email: string) => void;
+}: {
+  onClose: () => void;
+  onSuccess: (u: AuthUser, token?: string) => void;
+  onSwitch: (r: "user" | "shop_owner" | "rider") => void;
   initialRole?: "user" | "shop_owner" | "rider";
   initialEmail?: string;
 }) {
+  const router = useRouter();
   const [email, setEmail] = useState(initialEmail);
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -647,15 +647,13 @@ function LoginModal({
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="block text-sm font-semibold text-slate-700">Password</label>
-              {onForgotPassword && (
-                <button
-                  type="button"
-                  onClick={() => onForgotPassword(role, email)}
-                  className="text-xs font-bold text-[#1E3A2F] hover:underline"
-                >
-                  Forgot Password?
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => router.push('/forgot-password')}
+                className="text-xs font-bold text-[#1E3A2F] hover:underline"
+              >
+                Forgot Password?
+              </button>
             </div>
             <div className="relative">
               <input type={showPw ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50" required />
@@ -676,7 +674,7 @@ function LoginModal({
 }
 
 // ─── Forgot Password Modal ─────────────────────────────────────────
-function ForgotPasswordModal({
+// Deprecated ForgotPasswordModal (now using standalone page)
   onClose,
   initialRole = "user",
   initialEmail = "",
@@ -967,7 +965,7 @@ export default function Home() {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  // Removed legacy showForgotPassword state; handled via new page flow
   const [authModalRole, setAuthModalRole] = useState<"user" | "shop_owner" | "rider">("user");
   const [authModalEmail, setAuthModalEmail] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1505,11 +1503,11 @@ export default function Home() {
           initialEmail={authModalEmail}
           onClose={() => setShowLogin(false)} 
           onSuccess={handleAuthSuccess} 
-          onForgotPassword={(r, em) => {
+          // onForgotPassword removed; navigation handled by /forgot-password page
             setAuthModalRole(r);
             if (em) setAuthModalEmail(em);
             setShowLogin(false);
-            setShowForgotPassword(true);
+            router.push('/forgot-password');
           }}
           onSwitch={(r) => { 
             setAuthModalRole(r);
@@ -1518,19 +1516,7 @@ export default function Home() {
           }} 
         />
       )}
-      {showForgotPassword && (
-        <ForgotPasswordModal
-          initialRole={authModalRole}
-          initialEmail={authModalEmail}
-          onClose={() => setShowForgotPassword(false)}
-          onBackToLogin={(r, em) => {
-            setAuthModalRole(r);
-            if (em) setAuthModalEmail(em);
-            setShowForgotPassword(false);
-            setShowLogin(true);
-          }}
-        />
-      )}
+      
       {showSignup && (
         <SignupModal 
           initialRole={authModalRole}
