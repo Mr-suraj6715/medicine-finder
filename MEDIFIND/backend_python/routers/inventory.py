@@ -280,6 +280,7 @@ def search_medicines(q: str = Query(""), db: Session = Depends(get_db)):
         medicines = db.query(models.Medicine).filter(
             or_(
                 models.Medicine.name.ilike(f"%{q}%"),
+                models.Medicine.genericName.ilike(f"%{q}%"),
                 models.Medicine.category.ilike(f"%{q}%"),
                 models.Medicine.indications.ilike(f"%{q}%")
             )

@@ -31,8 +31,92 @@ class SignupRequest(BaseModel):
 
 class AddressCreate(BaseModel):
     userId: str = Field(..., max_length=128)
-    label: str = Field(..., min_length=1, max_length=50)
-    address: str = Field(..., min_length=5, max_length=255)
+    label: str = Field("Home", max_length=50)
+    fullName: str = Field(..., min_length=2, max_length=100)
+    phone: str = Field(..., min_length=10, max_length=15)
+    houseNumber: str = Field(..., min_length=1, max_length=100)
+    street: str = Field(..., min_length=2, max_length=200)
+    landmark: Optional[str] = Field(None, max_length=200)
+    city: str = Field(..., min_length=2, max_length=100)
+    state: str = Field(..., min_length=2, max_length=100)
+    pincode: str = Field(..., min_length=6, max_length=6)
+    isDefault: Optional[bool] = False
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    @validator("phone")
+    def validate_phone(cls, v):
+        cleaned = re.sub(r"[\s\-\(\)\+]", "", v)
+        if not re.match(r"^[6-9]\d{9}$", cleaned):
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return cleaned
+
+    @validator("pincode")
+    def validate_pincode(cls, v):
+        cleaned = v.strip()
+        if not re.match(r"^[1-9][0-9]{5}$", cleaned):
+            raise ValueError("Enter a valid 6-digit Indian PIN code")
+        return cleaned
+
+    @validator("fullName")
+    def validate_name(cls, v):
+        v = v.strip()
+        if not re.match(r"^[A-Za-z\s\.\-\']+$", v):
+            raise ValueError("Full Name must contain only letters and spaces")
+        if len(v) < 2:
+            raise ValueError("Full Name is too short (min 2 characters)")
+        return v
+
+    @validator("city", "state")
+    def validate_city_state(cls, v):
+        v = v.strip()
+        if not re.match(r"^[A-Za-z0-9\s\.\-\',()]+$", v):
+            raise ValueError("Must contain valid letters and characters")
+        if len(v) < 2:
+            raise ValueError("Value is too short (min 2 characters)")
+        return v
+
+    @validator("houseNumber", "street")
+    def validate_address_fields(cls, v):
+        v = v.strip()
+        if len(v) < 1:
+            raise ValueError("Field cannot be empty")
+        if len(v) > 200:
+            raise ValueError("Field is too long")
+        return v
+
+
+class AddressUpdate(BaseModel):
+    label: Optional[str] = Field(None, max_length=50)
+    fullName: Optional[str] = Field(None, min_length=2, max_length=100)
+    phone: Optional[str] = Field(None, min_length=10, max_length=15)
+    houseNumber: Optional[str] = Field(None, min_length=1, max_length=100)
+    street: Optional[str] = Field(None, min_length=2, max_length=200)
+    landmark: Optional[str] = Field(None, max_length=200)
+    city: Optional[str] = Field(None, min_length=2, max_length=100)
+    state: Optional[str] = Field(None, min_length=2, max_length=100)
+    pincode: Optional[str] = Field(None, min_length=6, max_length=6)
+    isDefault: Optional[bool] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+
+    @validator("phone", pre=True, always=False)
+    def validate_phone(cls, v):
+        if v is None:
+            return v
+        cleaned = re.sub(r"[\s\-\(\)\+]", "", v)
+        if not re.match(r"^[6-9]\d{9}$", cleaned):
+            raise ValueError("Enter a valid 10-digit Indian mobile number")
+        return cleaned
+
+    @validator("pincode", pre=True, always=False)
+    def validate_pincode(cls, v):
+        if v is None:
+            return v
+        cleaned = v.strip()
+        if not re.match(r"^[1-9][0-9]{5}$", cleaned):
+            raise ValueError("Enter a valid 6-digit Indian PIN code")
+        return cleaned
 
 class RiderProfileUpdate(BaseModel):
     userId: str = Field(..., max_length=128)
