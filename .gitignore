@@ -39,8 +39,25 @@ pnpm-debug.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+venv/
+.venv/
+env/
+
+# Databases
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
 # Antigravity/Gemini data
 .gemini/
 .antigravity/
 .brain/
 storage/
+

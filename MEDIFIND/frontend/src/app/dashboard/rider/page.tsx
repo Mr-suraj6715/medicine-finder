@@ -4,6 +4,7 @@ import {
   HeartPulse, Package, LogOut, Navigation, CheckCircle, 
   Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
 import dynamic from "next/dynamic";
 
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -15,16 +16,16 @@ const Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { 
 type AuthUser = { id: string; email: string; name: string; role: string; phone?: string; address?: string; vehicleType?: string };
 
 const STATUS_COLORS: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-700 border-amber-200",
-  PROCESSING: "bg-blue-100 text-blue-700 border-blue-200",
-  CONFIRMED: "bg-indigo-100 text-indigo-700 border-indigo-200",
-  RIDER_ASSIGNED: "bg-sky-100 text-sky-700 border-sky-200",
-  RIDER_AT_PHARMACY: "bg-cyan-100 text-cyan-700 border-cyan-200",
-  RIDER_PICKED_UP: "bg-teal-100 text-teal-700 border-teal-200",
-  OUT_FOR_DELIVERY: "bg-purple-100 text-purple-700 border-purple-200",
-  REACHED_CUSTOMER: "bg-pink-100 text-pink-700 border-pink-200",
-  DELIVERED: "bg-green-100 text-green-700 border-green-200",
-  CANCELLED: "bg-rose-100 text-rose-700 border-rose-200",
+  PENDING: "bg-amber-50 text-amber-800 border-amber-200",
+  PROCESSING: "bg-blue-50 text-blue-800 border-blue-200",
+  CONFIRMED: "bg-indigo-50 text-indigo-800 border-indigo-200",
+  RIDER_ASSIGNED: "bg-sky-50 text-sky-800 border-sky-200",
+  RIDER_AT_PHARMACY: "bg-teal-50 text-teal-800 border-teal-200",
+  RIDER_PICKED_UP: "bg-teal-50 text-teal-800 border-teal-200",
+  OUT_FOR_DELIVERY: "bg-purple-50 text-purple-800 border-purple-200",
+  REACHED_CUSTOMER: "bg-pink-50 text-pink-800 border-pink-200",
+  DELIVERED: "bg-[#E8F3ED] text-[#1E3A2F] border-[#CDE3D5]",
+  CANCELLED: "bg-rose-50 text-rose-800 border-rose-200",
   FAILED: "bg-slate-100 text-slate-700 border-slate-200",
 };
 
@@ -53,23 +54,23 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
   const centerLng = (pharmacy.lng + customer.lng) / 2;
 
   return (
-    <div className="w-full h-full rounded-2xl overflow-hidden shadow-inner border border-slate-200">
+    <div className="w-full h-full rounded-[28px] overflow-hidden shadow-inner border border-[#E2EFE7]">
       <MapContainer center={[centerLat, centerLng]} zoom={14} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer 
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
         />
         <Marker position={[pharmacy.lat, pharmacy.lng]} icon={shopIcon}><Popup>Pharmacy</Popup></Marker>
-        <Marker position={[customer.lat, customer.lng]} icon={customerIcon}><Popup>Customer</Popup></Marker>
-        {rider && <Marker position={[rider.lat, rider.lng]} icon={riderIcon}><Popup>Rider (You)</Popup></Marker>}
+        <Marker position={[customer.lat, customer.lng]} icon={customerIcon}><Popup>Customer Destination</Popup></Marker>
+        {rider && <Marker position={[rider.lat, rider.lng]} icon={riderIcon}><Popup>Your Location</Popup></Marker>}
         <Polyline 
           positions={[[pharmacy.lat, pharmacy.lng], [customer.lat, customer.lng]]}
-          pathOptions={{ color: '#0ea5e9', weight: 4, opacity: 0.6, dashArray: '8, 8' }} 
+          pathOptions={{ color: '#1E3A2F', weight: 4, opacity: 0.7, dashArray: '8, 8' }} 
         />
         {rider && (
           <Polyline 
             positions={[[rider.lat, rider.lng], [customer.lat, customer.lng]]}
-            pathOptions={{ color: '#22c55e', weight: 4, opacity: 0.8 }} 
+            pathOptions={{ color: '#059669', weight: 4, opacity: 0.8 }} 
           />
         )}
       </MapContainer>
@@ -79,6 +80,7 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
 
 export default function RiderDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [tab, setTab] = useState<"active" | "available" | "history" | "earnings" | "profile">("active");
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,6 +96,8 @@ export default function RiderDashboard() {
     address?: string;
     vehicleType?: string;
   } | null>(null);
+
+  const [profileLoaded, setProfileLoaded] = useState(false);
 
   // Profile Edit State
   const [profileForm, setProfileForm] = useState({
@@ -127,7 +131,7 @@ export default function RiderDashboard() {
           if (user) {
             fetch("/api/rider/orders", {
               method: "PATCH",
-              headers: { "Content-Type": "application/json" },
+              headers: getAuthHeaders(),
               body: JSON.stringify({ riderId: user.id, latitude: loc.lat, longitude: loc.lng })
             });
           }
@@ -142,18 +146,25 @@ export default function RiderDashboard() {
   const fetchRiderData = useCallback(async (userId: string, silent = false) => {
     try {
       if (!silent) setLoading(true);
-      const res = await fetch(`/api/rider/orders?riderId=${userId}`);
+      const res = await fetch(`/api/rider/orders?riderId=${userId}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.orders) {
         setOrders(data.orders);
       }
       if (data.riderStats) {
         setRiderStats(data.riderStats);
-        setProfileForm({
-          name: data.riderStats.name || "",
-          phone: data.riderStats.phone || "",
-          address: data.riderStats.address || "",
-          vehicleType: data.riderStats.vehicleType || "Motorcycle",
+        // Only set profile form once on initial load so typing is not wiped out
+        setProfileLoaded(prev => {
+          if (!prev) {
+            setProfileForm({
+              name: data.riderStats.name || "",
+              phone: data.riderStats.phone || "",
+              address: data.riderStats.address || "",
+              vehicleType: data.riderStats.vehicleType || "Motorcycle",
+            });
+            return true;
+          }
+          return prev;
         });
       }
     } catch (e) {
@@ -164,46 +175,42 @@ export default function RiderDashboard() {
   }, []);
 
   useEffect(() => {
-    const stored = localStorage.getItem("medifind_user_rider") || localStorage.getItem("medifind_user");
-    if (!stored) { window.location.href = "/"; return; }
-    try {
-      const u = JSON.parse(stored);
-      if (u.role !== "rider") {
-        if (u.role === "shop_owner") window.location.href = "/dashboard/shop";
-        else if (u.role === "user") window.location.href = "/dashboard/user";
-        else window.location.href = "/";
-        return;
-      }
+    const u = getStoredUser();
 
-      setUser(u);
-      setProfileForm({
-        name: u.name || "",
-        phone: u.phone || "",
-        address: u.address || "",
-        vehicleType: u.vehicleType || "Motorcycle",
-      });
-      fetchRiderData(u.id);
-      
-      const interval = setInterval(() => fetchRiderData(u.id, true), 5000);
-      return () => clearInterval(interval);
-    } catch { window.location.href = "/"; }
+    if (!u) {
+      window.location.replace("/?auth=login&role=rider");
+      return;
+    }
+
+    if (u.role !== "rider") {
+      window.location.replace(getDashboardUrl(u.role));
+      return;
+    }
+
+    setUser(u as any);
+    setProfileForm({
+      name: u.name || "",
+      phone: u.phone || "",
+      address: u.address || "",
+      vehicleType: u.vehicleType || "Motorcycle",
+    });
+    setAuthLoading(false);
+    fetchRiderData(u.id);
+    
+    const interval = setInterval(() => fetchRiderData(u.id, true), 5000);
+    return () => clearInterval(interval);
   }, [fetchRiderData]);
 
   const handleLogout = () => {
-    localStorage.removeItem("medifind_user");
-    localStorage.removeItem("medifind_role");
-    localStorage.removeItem("medifind_active_role");
-    localStorage.removeItem("medifind_user_user");
-    localStorage.removeItem("medifind_user_shop_owner");
-    localStorage.removeItem("medifind_user_rider");
-    window.location.href = "/";
+    clearAuthSession();
+    window.location.replace("/?auth=login&role=rider");
   };
 
   const updateStatus = async (orderId: string, status: string) => {
     try {
       const res = await fetch('/api/rider/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ orderId, status, riderId: user?.id }),
       });
       if (res.ok) {
@@ -218,7 +225,7 @@ export default function RiderDashboard() {
     try {
       const res = await fetch('/api/rider/orders', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ orderId, riderId: user?.id }),
       });
       if (res.ok) {
@@ -234,7 +241,6 @@ export default function RiderDashboard() {
     e.preventDefault();
     if (!user) return;
 
-    // Client-side Validation
     if (!profileForm.name || profileForm.name.trim().length < 2) {
       setProfileMsg({ type: "error", text: "Name must be at least 2 characters long." });
       return;
@@ -254,7 +260,7 @@ export default function RiderDashboard() {
     try {
       const res = await fetch('/api/rider/profile', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           userId: user.id,
           name: profileForm.name,
@@ -268,7 +274,6 @@ export default function RiderDashboard() {
       if (res.ok && data.success) {
         setProfileMsg({ type: "success", text: "Profile updated successfully!" });
         
-        // Update user state and local storage
         const updatedUser = { ...user, ...data.user };
         setUser(updatedUser);
         localStorage.setItem("medifind_user_rider", JSON.stringify(updatedUser));
@@ -294,76 +299,82 @@ export default function RiderDashboard() {
   const emergencyDeliveries = historyOrders.filter(o => o.isEmergency);
   const totalEarnings = emergencyDeliveries.reduce((sum, o) => sum + (o.surgeFee || 0), 0);
 
+  if (authLoading || !user) return (
+    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
+      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+        <HeartPulse size={32} />
+      </div>
+      <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Delivery Partner Authorization...</p>
+    </div>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-white border-r border-slate-200 flex flex-col z-20">
-        <div className="p-6">
-          <div className="flex items-center gap-2 mb-8">
-            <div className="bg-gradient-to-tr from-sky-500 to-green-500 p-2 rounded-xl text-white shadow-lg shadow-sky-100">
-              <HeartPulse size={24} strokeWidth={2.5} />
-            </div>
-            <span className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-sky-600 to-green-600 tracking-tight">MediFind</span>
+    <div className="min-h-screen bg-[#F6FAF7] flex flex-col md:flex-row font-sans text-slate-900">
+      {/* Sidebar (Hers Aesthetic) */}
+      <aside className="w-full md:w-72 bg-white border-r border-[#E2EFE7] flex flex-col z-20">
+        <div className="p-8">
+          <div className="flex items-center gap-3 mb-10">
+            <a href="/" className="text-3xl font-serif font-bold tracking-tighter text-[#1E3A2F]">medifind</a>
           </div>
 
-          <nav className="space-y-1">
+          <nav className="space-y-1.5">
             {[
               { id: "active", label: "Active Delivery", icon: Play },
               { id: "available", label: "Available Tasks", icon: List },
-              { id: "history", label: "History", icon: Package },
-              { id: "earnings", label: "Earnings", icon: DollarSign },
-              { id: "profile", label: "Edit Profile", icon: UserCheck },
+              { id: "history", label: "Delivery History", icon: Package },
+              { id: "earnings", label: "My Earnings", icon: DollarSign },
+              { id: "profile", label: "Rider Profile", icon: UserCheck },
             ].map(item => (
               <button
                 key={item.id}
                 onClick={() => setTab(item.id as any)}
-                className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold transition-all ${
-                  tab === item.id ? "bg-sky-500 text-white shadow-lg shadow-sky-100" : "text-slate-500 hover:bg-slate-50"
+                className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-full text-xs font-black uppercase tracking-wider transition-all ${
+                  tab === item.id ? "bg-[#1E3A2F] text-white shadow-md" : "text-slate-600 hover:bg-[#F6FAF7] hover:text-[#1E3A2F]"
                 }`}
               >
-                <item.icon size={18} /> {item.label}
+                <item.icon size={17} /> {item.label}
               </button>
             ))}
           </nav>
         </div>
 
-        <div className="mt-auto p-6 border-t border-slate-100">
-          <div className="flex items-center gap-3 mb-4 p-2 rounded-2xl bg-slate-50 border border-slate-100 cursor-pointer" onClick={() => setTab("profile")}>
-            <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-sky-600 font-black">
-              {user?.name?.[0] || "R"}
+        <div className="mt-auto p-6 border-t border-[#E2EFE7]">
+          <div className="flex items-center gap-3 mb-4 p-3 rounded-2xl bg-[#F6FAF7] border border-[#E2EFE7] cursor-pointer" onClick={() => setTab("profile")}>
+            <div className="w-10 h-10 rounded-xl bg-[#E8F3ED] flex items-center justify-center text-[#1E3A2F] font-serif font-black text-lg">
+              {user?.name?.[0]?.toUpperCase() || "R"}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-black text-slate-900 truncate">{user?.name}</p>
-              <p className="text-[10px] font-bold text-sky-500 uppercase tracking-widest">Rider</p>
+              <p className="text-xs font-bold text-slate-900 truncate">{user?.name}</p>
+              <p className="text-[10px] font-black text-[#1E3A2F] uppercase tracking-widest">Active Dispatcher</p>
             </div>
           </div>
-          <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-bold text-rose-500 hover:bg-rose-50 transition-all">
-            <LogOut size={18} /> Sign Out
+          <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-full text-xs font-bold text-slate-500 hover:bg-rose-50 hover:text-rose-600 transition-all">
+            <LogOut size={16} /> Sign Out
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-10 max-w-5xl mx-auto w-full">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-2">
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tight">
-              {tab === "active" && "Current Delivery"}
-              {tab === "available" && "Available Deliveries"}
+            <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900">
+              {tab === "active" && "Active Delivery"}
+              {tab === "available" && "Available Tasks"}
               {tab === "history" && "Delivery History"}
-              {tab === "earnings" && "Your Earnings"}
-              {tab === "profile" && "Rider Profile Settings 🚴"}
+              {tab === "earnings" && "My Earnings & Payouts"}
+              {tab === "profile" && "Rider Profile 🚴"}
             </h1>
             <p className="text-slate-500 font-medium text-sm mt-1">
-              {tab === "profile" ? "Manage your rider profile information and vehicle details." : "Manage your pharmacy medicine deliveries in real-time."}
+              {tab === "profile" ? "Update your personal details and vehicle configuration." : "Instant medicine pickups and door-to-door delivery tracking."}
             </p>
           </div>
           {tab === "earnings" && (
-            <div className="bg-sky-500 text-white px-6 py-3 rounded-2xl shadow-xl shadow-sky-100 flex items-center gap-3">
-              <DollarSign size={24} />
+            <div className="bg-[#1E3A2F] text-white px-7 py-3.5 rounded-full shadow-lg flex items-center gap-3">
+              <DollarSign size={22} className="text-emerald-300" />
               <div>
-                <p className="text-[10px] font-black uppercase opacity-80 tracking-widest">Total Earnings</p>
-                <p className="text-2xl font-black">₹{totalEarnings.toFixed(2)}</p>
+                <p className="text-[10px] font-black uppercase opacity-80 tracking-widest text-emerald-200">Surge Earnings</p>
+                <p className="text-xl font-black">₹{totalEarnings.toFixed(2)}</p>
               </div>
             </div>
           )}
@@ -371,8 +382,8 @@ export default function RiderDashboard() {
 
         {/* Rider Performance Stats */}
         {riderStats && tab !== "profile" && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8 pt-4">
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+            <div className="bg-white p-5 rounded-[24px] border border-[#E2EFE7] shadow-sm">
               <div className="flex justify-between items-start mb-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Rider Rating</p>
                 <div className="bg-amber-50 text-amber-600 p-1.5 rounded-xl"><Star size={14} fill="currentColor" /></div>
@@ -383,23 +394,23 @@ export default function RiderDashboard() {
               </div>
             </div>
             
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="bg-white p-5 rounded-[24px] border border-[#E2EFE7] shadow-sm">
               <div className="flex justify-between items-start mb-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Loyalty Points</p>
-                <div className="bg-purple-50 text-purple-600 p-1.5 rounded-xl"><Award size={14} /></div>
+                <div className="bg-[#E8F3ED] text-[#1E3A2F] p-1.5 rounded-xl"><Award size={14} /></div>
               </div>
               <p className="text-2xl font-black text-slate-900">{riderStats.loyaltyPoints || 0}</p>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="bg-white p-5 rounded-[24px] border border-[#E2EFE7] shadow-sm">
               <div className="flex justify-between items-start mb-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Completed</p>
-                <div className="bg-green-50 text-green-600 p-1.5 rounded-xl"><CheckCircle size={14} /></div>
+                <div className="bg-emerald-50 text-emerald-700 p-1.5 rounded-xl"><CheckCircle size={14} /></div>
               </div>
               <p className="text-2xl font-black text-slate-900">{riderStats.completedDeliveries || 0}</p>
             </div>
 
-            <div className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm">
+            <div className="bg-white p-5 rounded-[24px] border border-[#E2EFE7] shadow-sm">
               <div className="flex justify-between items-start mb-2">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cancelled</p>
                 <div className="bg-rose-50 text-rose-600 p-1.5 rounded-xl"><X size={14} /></div>
@@ -411,73 +422,73 @@ export default function RiderDashboard() {
 
         {/* PROFILE TAB */}
         {tab === "profile" && (
-          <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm max-w-2xl mt-4">
+          <div className="bg-white rounded-[32px] p-8 border border-[#E2EFE7] shadow-sm max-w-2xl">
             {profileMsg && (
-              <div className={`p-4 rounded-2xl mb-6 text-sm font-bold flex items-center gap-3 ${profileMsg.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
+              <div className={`p-4 rounded-2xl mb-6 text-xs font-bold flex items-center gap-3 ${profileMsg.type === "success" ? "bg-[#E8F3ED] text-[#1E3A2F] border border-[#CDE3D5]" : "bg-rose-50 text-rose-700 border border-rose-200"}`}>
                 {profileMsg.type === "success" ? <CheckCircle size={18} /> : <AlertCircle size={18} />}
                 <span>{profileMsg.text}</span>
               </div>
             )}
 
-            <form onSubmit={handleSaveProfile} className="space-y-6">
+            <form onSubmit={handleSaveProfile} className="space-y-5">
               <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Full Name</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">Full Name</label>
                 <input
                   type="text"
                   required
                   value={profileForm.name}
                   onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
                   placeholder="Enter your full name"
-                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                  className="w-full px-4 py-3 rounded-2xl bg-[#F6FAF7] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] font-medium text-slate-800 text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Email Address (Read only)</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">Email Address</label>
                 <input
                   type="email"
                   disabled
                   value={user?.email || ""}
-                  className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50 font-medium text-slate-400 text-sm cursor-not-allowed"
+                  className="w-full px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 font-medium text-slate-400 text-sm cursor-not-allowed"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Phone Number</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">Phone Number</label>
                 <div className="relative">
-                  <Phone size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <Phone size={16} className="absolute left-4 top-3.5 text-slate-400" />
                   <input
                     type="tel"
                     value={profileForm.phone}
                     onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
                     placeholder="+91 9876543210"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#F6FAF7] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] font-medium text-slate-800 text-sm"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Residential Address / Base Location</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">Residential Base / City</label>
                 <div className="relative">
-                  <Home size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <Home size={16} className="absolute left-4 top-3.5 text-slate-400" />
                   <input
                     type="text"
                     value={profileForm.address}
                     onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
                     placeholder="Enter your city/address"
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#F6FAF7] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] font-medium text-slate-800 text-sm"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-black text-slate-600 uppercase tracking-wider mb-2">Vehicle Type</label>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-wider mb-1.5">Vehicle Type</label>
                 <div className="relative">
-                  <Truck size={16} className="absolute left-3.5 top-3.5 text-slate-400" />
+                  <Truck size={16} className="absolute left-4 top-3.5 text-slate-400" />
                   <select
                     value={profileForm.vehicleType}
                     onChange={(e) => setProfileForm({ ...profileForm, vehicleType: e.target.value })}
-                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-sky-500 font-medium text-slate-800 text-sm bg-white"
+                    className="w-full pl-11 pr-4 py-3 rounded-2xl bg-[#F6FAF7] border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] font-medium text-slate-800 text-sm"
                   >
                     <option value="Motorcycle">Motorcycle / Scooter</option>
                     <option value="Bicycle">Bicycle</option>
@@ -491,7 +502,7 @@ export default function RiderDashboard() {
                 <button
                   type="submit"
                   disabled={profileSaving}
-                  className="bg-sky-600 hover:bg-sky-700 text-white px-8 py-3.5 rounded-2xl font-black text-sm shadow-lg shadow-sky-200 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                  className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Save size={16} />
                   {profileSaving ? "Saving Changes..." : "Save Profile"}
@@ -503,238 +514,169 @@ export default function RiderDashboard() {
 
         {loading && tab !== "profile" ? (
           <div className="flex items-center justify-center h-64">
-            <Activity className="text-sky-500 animate-spin" size={40} />
+            <Activity className="text-[#1E3A2F] animate-spin" size={40} />
           </div>
         ) : tab !== "profile" && (
           <div className="space-y-6">
             {tab === "active" && activeOrders.length === 0 && (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+              <div className="text-center py-20 bg-white rounded-[32px] border border-dashed border-[#D5E6DC]">
                 <Navigation size={48} className="mx-auto text-slate-300 mb-4" />
-                <h3 className="text-lg font-bold text-slate-900">No active delivery</h3>
-                <p className="text-slate-400 text-sm">Pick up an order from the available tasks.</p>
-                <button onClick={() => setTab("available")} className="mt-6 bg-sky-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-lg shadow-sky-100 transition-all active:scale-95">View Available Tasks</button>
+                <h3 className="text-lg font-bold text-slate-900">No active deliveries right now</h3>
+                <p className="text-slate-400 text-sm mt-1">Accept a pending task from the available orders list.</p>
+                <button onClick={() => setTab("available")} className="mt-6 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95">View Available Orders</button>
               </div>
             )}
 
             {tab === "available" && availableOrders.length === 0 && (
-              <div className="text-center py-20 bg-white rounded-3xl border border-dashed border-slate-200">
+              <div className="text-center py-20 bg-white rounded-[32px] border border-dashed border-[#D5E6DC]">
                 <List size={48} className="mx-auto text-slate-300 mb-4" />
-                <h3 className="text-lg font-bold text-slate-900">No available orders</h3>
-                <p className="text-slate-400 text-sm max-w-xs mx-auto">Orders will appear here once the pharmacy accepts them. Check back in a few moments or refresh.</p>
+                <h3 className="text-lg font-bold text-slate-900">No orders awaiting dispatch</h3>
+                <p className="text-slate-400 text-sm max-w-xs mx-auto mt-1">Orders will appear here once local pharmacies confirm & pack them.</p>
               </div>
             )}
 
             {(tab === "active" ? activeOrders : tab === "available" ? availableOrders : historyOrders).map((order) => (
-              <div key={order.id} className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden hover:shadow-md transition-shadow">
-                <div className="p-6">
-                  <div className="flex justify-between items-start mb-6">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${order.isEmergency ? "bg-rose-500 shadow-rose-100" : "bg-sky-500 shadow-sky-100"}`}>
-                        <Navigation size={24} />
+              <div key={order.id} className="bg-white rounded-[28px] shadow-sm border border-[#E2EFE7] overflow-hidden p-6 hover:shadow-md transition-shadow">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${order.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}>
+                      <Navigation size={22} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-slate-900 text-base">Order #{order.id.slice(-6)}</h4>
+                        {order.isEmergency && <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2.5 py-0.5 rounded-full border border-rose-100 uppercase">EMERGENCY</span>}
                       </div>
+                      <p className="text-xs text-slate-500 font-medium">Customer: {order.customer || "Customer"}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-[10px] font-black px-3 py-1 rounded-full border mb-1 inline-block uppercase ${STATUS_COLORS[order.status]}`}>
+                      {order.status.replace(/_/g, " ")}
+                    </p>
+                    <p className="text-[10px] text-slate-400 font-bold block uppercase tracking-tighter">{order.time || "Recent"}</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-4">
+                    <div className="flex items-start gap-3 bg-[#F6FAF7] p-4 rounded-2xl border border-[#E2EFE7]">
+                      <MapPin size={18} className="text-emerald-700 shrink-0 mt-0.5" />
                       <div>
-                        <div className="flex items-center gap-2">
-                          <h4 className="font-black text-slate-900">Order #{order.id.slice(-6)}</h4>
-                          {order.isEmergency && <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full border border-rose-100">EMERGENCY</span>}
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium">Customer: {order.customer}</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Pick up from</p>
+                        <p className="text-sm font-bold text-slate-800">{order.pharmacyName || "Local Pharmacy"}</p>
+                        <p className="text-xs text-slate-500 font-medium">{order.pharmacyAddress || "Mumbai, MH"}</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className={`text-[10px] font-black px-3 py-1 rounded-full border mb-1 inline-block ${STATUS_COLORS[order.status]}`}>
-                        {order.status.replace(/_/g, " ")}
-                      </p>
-                      <p className="text-[10px] text-slate-400 font-bold block uppercase tracking-tighter">{order.time}</p>
+                    <div className="flex items-start gap-3 bg-[#F6FAF7] p-4 rounded-2xl border border-[#E2EFE7]">
+                      <Navigation size={18} className="text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Deliver to</p>
+                        <p className="text-sm font-bold text-slate-800">{order.customer || "Customer"}</p>
+                        <p className="text-xs text-slate-500 font-medium">{order.customerAddress || "Mumbai, MH"}</p>
+                      </div>
                     </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                    <div className="space-y-4">
-                      <div className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <MapPin size={18} className="text-green-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Pick up from</p>
-                          <p className="text-sm font-bold text-slate-800">{order.pharmacyName || "Local Pharmacy"}</p>
-                          <p className="text-xs text-slate-500 font-medium">{order.pharmacyAddress || "Mumbai, MH"}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <Navigation size={18} className="text-rose-600 shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Deliver to</p>
-                          <p className="text-sm font-bold text-slate-800">{order.customer}</p>
-                          <p className="text-xs text-slate-500 font-medium">{order.customerAddress || "Mumbai, MH"}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <ShoppingCart size={18} className="text-sky-600 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Order Details</p>
-                          <div className="space-y-1 mt-1">
-                            {order.items?.map((item: any, idx: number) => (
-                              <div key={idx} className="flex justify-between text-xs">
-                                <span className="text-slate-600 font-medium">{item.name} × {item.qty}</span>
-                                <span className="text-slate-400">₹{(item.price || 0).toFixed(0)}</span>
-                              </div>
-                            ))}
-                            <div className="flex justify-between border-t border-slate-50 pt-1 mt-1 font-black text-slate-900">
-                              <span>Order Value</span>
-                              <span className="text-sky-600">₹{order.total.toFixed(2)}</span>
+                    <div className="flex items-start gap-3 bg-[#F6FAF7] p-4 rounded-2xl border border-[#E2EFE7]">
+                      <ShoppingCart size={18} className="text-[#1E3A2F] shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Order Items</p>
+                        <div className="space-y-1 mt-1">
+                          {order.items?.map((item: any, idx: number) => (
+                            <div key={idx} className="flex justify-between text-xs">
+                              <span className="text-slate-600 font-medium">{item.name} × {item.qty}</span>
+                              <span className="text-slate-400">₹{(item.price || 0).toFixed(0)}</span>
                             </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-start gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
-                        <Clock size={18} className="text-amber-600 shrink-0 mt-0.5" />
-                        <div className="flex-1">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-1">Delivery Progress</p>
-                          <div className="flex justify-between items-center mt-1">
-                            <div>
-                               <p className="text-sm font-bold text-slate-800">Distance: {order.deliveryDistance?.toFixed(1) || "1.0"} km</p>
-                               <p className="text-[10px] text-slate-400 font-medium">Goal: Under {((order.deliveryDistance || 1.0) * 10).toFixed(0)} min for 5⭐</p>
-                            </div>
-                            {order.deliveryStartTime && (
-                              <div className="text-right">
-                                <p className="text-xs font-black text-sky-600 animate-pulse">
-                                  Timer Started
-                                </p>
-                                <p className="text-[10px] text-slate-400 font-medium">
-                                  {Math.round((new Date().getTime() - new Date(order.deliveryStartTime).getTime()) / 60000)} min elapsed
-                                </p>
-                              </div>
-                            )}
+                          ))}
+                          <div className="flex justify-between border-t border-slate-200 pt-1 mt-1 font-black text-slate-900">
+                            <span>Order Total</span>
+                            <span className="text-[#1E3A2F]">₹{(order.total || 0).toFixed(2)}</span>
                           </div>
                         </div>
                       </div>
                     </div>
-                    {tab === "active" && (
-                      <div className="h-[280px] lg:h-auto min-h-[280px] relative">
-                         <DeliveryMap 
-                           pharmacy={order.pharmacyCoord} 
-                           customer={order.customerCoord} 
-                           rider={riderLocation} 
-                         />
-                      </div>
-                    )}
                   </div>
-
-                  {tab === "available" && (
-                    <button 
-                      onClick={() => acceptOrder(order.realId || order.id)}
-                      className="w-full bg-slate-900 hover:bg-slate-800 text-white py-4 rounded-2xl font-black text-sm transition-all active:scale-95 shadow-xl flex items-center justify-center gap-2"
-                    >
-                      Accept Delivery - ₹{order.isEmergency ? order.surgeFee : 0} Earnings
-                    </button>
-                  )}
-
                   {tab === "active" && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-                      {order.status === "RIDER_ASSIGNED" && (
-                        <button onClick={() => updateStatus(order.realId || order.id, "RIDER_AT_PHARMACY")} className="w-full bg-sky-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                          <Navigation size={14} /> Navigate to Pharmacy
-                        </button>
-                      )}
-                      {order.status === "RIDER_AT_PHARMACY" && (
-                        <button onClick={() => updateStatus(order.realId || order.id, "RIDER_PICKED_UP")} className="w-full bg-amber-500 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                          <Package size={14} /> Pick Up Order
-                        </button>
-                      )}
-                      {order.status === "RIDER_PICKED_UP" && (
-                        <button onClick={() => updateStatus(order.realId || order.id, "OUT_FOR_DELIVERY")} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                          <Navigation size={14} /> Out for Delivery
-                        </button>
-                      )}
-                      {order.status === "OUT_FOR_DELIVERY" && (
-                        <button onClick={() => updateStatus(order.realId || order.id, "REACHED_CUSTOMER")} className="w-full bg-pink-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                          <MapPin size={14} /> Reached Customer Location
-                        </button>
-                      )}
-                      {order.status === "REACHED_CUSTOMER" && (
-                        <div className="sm:col-span-2 p-3 bg-green-50 text-green-700 rounded-xl text-center font-bold text-xs border border-green-100 border-dashed">
-                          Reached destination. Waiting for customer confirmation or shop delivery completion.
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {tab === "active" && order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "FAILED" && (
-                    <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
-                      <button 
-                         onClick={() => { if(window.confirm("Cancel this delivery assignment? The order will be returned to the available pool for reassignment.")) updateStatus(order.realId || order.id, "CANCELLED"); }}
-                         className="text-[10px] font-bold text-rose-500 hover:bg-rose-50 px-3 py-1.5 rounded-lg transition-all"
-                      >
-                        Cancel Delivery
-                      </button>
-                      <button 
-                         onClick={() => { if(window.confirm("Mark as failed? This will affect your performance stats.")) updateStatus(order.realId || order.id, "FAILED"); }}
-                         className="text-[10px] font-bold text-slate-400 hover:bg-slate-50 px-3 py-1.5 rounded-lg transition-all"
-                      >
-                        Mark as Failed
-                      </button>
+                    <div className="h-[280px] lg:h-auto min-h-[280px] relative">
+                       <DeliveryMap 
+                         pharmacy={order.pharmacyCoord || { lat: 19.0760, lng: 72.8777 }} 
+                         customer={order.customerCoord || { lat: 19.0800, lng: 72.8800 }} 
+                         rider={riderLocation} 
+                       />
                     </div>
                   )}
                 </div>
+
+                {tab === "available" && (
+                  <button 
+                    onClick={() => acceptOrder(order.realId || order.id)}
+                    className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                  >
+                    Accept Delivery {order.isEmergency ? `— ₹${order.surgeFee} Surge Earnings` : "— Standard Delivery"}
+                  </button>
+                )}
+
+                {tab === "active" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+                    {order.status === "RIDER_ASSIGNED" && (
+                      <button onClick={() => updateStatus(order.realId || order.id, "RIDER_AT_PHARMACY")} className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                        <Navigation size={14} /> At Pharmacy
+                      </button>
+                    )}
+                    {order.status === "RIDER_AT_PHARMACY" && (
+                      <button onClick={() => updateStatus(order.realId || order.id, "RIDER_PICKED_UP")} className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                        <Package size={14} /> Order Picked Up
+                      </button>
+                    )}
+                    {order.status === "RIDER_PICKED_UP" && (
+                      <button onClick={() => updateStatus(order.realId || order.id, "OUT_FOR_DELIVERY")} className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                        <Navigation size={14} /> Out for Delivery
+                      </button>
+                    )}
+                    {order.status === "OUT_FOR_DELIVERY" && (
+                      <button onClick={() => updateStatus(order.realId || order.id, "REACHED_CUSTOMER")} className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                        <MapPin size={14} /> Reached Destination
+                      </button>
+                    )}
+                    {order.status === "REACHED_CUSTOMER" && (
+                      <div className="sm:col-span-2 p-4 bg-[#E8F3ED] text-[#1E3A2F] rounded-2xl text-center font-bold text-xs border border-[#CDE3D5]">
+                        Rider reached customer location. Awaiting final order verification.
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {tab === "active" && order.status !== "DELIVERED" && order.status !== "CANCELLED" && order.status !== "FAILED" && (
+                  <div className="flex gap-3 mt-4 pt-4 border-t border-slate-100">
+                    <button 
+                       onClick={() => { if(window.confirm("Cancel this delivery assignment? The order will be released for reassignment.")) updateStatus(order.realId || order.id, "CANCELLED"); }}
+                       className="text-xs font-bold text-rose-600 hover:bg-rose-50 px-4 py-2 rounded-full transition-all"
+                    >
+                      Release Order
+                    </button>
+                    <button 
+                       onClick={() => { if(window.confirm("Mark delivery as failed?")) updateStatus(order.realId || order.id, "FAILED"); }}
+                       className="text-xs font-bold text-slate-400 hover:bg-slate-50 px-4 py-2 rounded-full transition-all"
+                    >
+                      Report Issue
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
 
             {tab === "earnings" && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <div className="bg-white p-6 rounded-[28px] border border-[#E2EFE7] shadow-sm">
                   <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Emergency Orders</p>
                   <p className="text-3xl font-black text-slate-900">{emergencyDeliveries.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Normal Orders</p>
+                <div className="bg-white p-6 rounded-[28px] border border-[#E2EFE7] shadow-sm">
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Standard Orders</p>
                   <p className="text-3xl font-black text-slate-900">{historyOrders.length - emergencyDeliveries.length}</p>
                 </div>
-                <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Avg. per Emergency</p>
-                  <p className="text-3xl font-black text-slate-900">₹{emergencyDeliveries.length ? (totalEarnings / emergencyDeliveries.length).toFixed(0) : 0}</p>
-                </div>
-                
-                <div className="md:col-span-3 overflow-hidden rounded-3xl border border-slate-100 shadow-sm">
-                  <table className="w-full text-left bg-white">
-                    <thead className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                      <tr>
-                        <th className="px-6 py-4">Order Details</th>
-                        <th className="px-6 py-4">Distance</th>
-                        <th className="px-6 py-4">Time</th>
-                        <th className="px-6 py-4">Rating</th>
-                        <th className="px-6 py-4">Loyalty</th>
-                        <th className="px-6 py-4">Earnings</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm font-bold text-slate-700">
-                      {historyOrders.map(o => (
-                        <tr key={o.id} className="border-t border-slate-50">
-                          <td className="px-6 py-4">
-                            <p className="font-black truncate">#{o.id.slice(-6)}</p>
-                            <p className="text-[10px] text-slate-400 font-medium">{o.time}</p>
-                          </td>
-                          <td className="px-6 py-4 text-xs font-black text-slate-600">{o.deliveryDistance?.toFixed(1) || "1.0"} km</td>
-                          <td className="px-6 py-4 text-xs font-bold text-slate-500">{o.deliveryDuration || "--"} min</td>
-                          <td className="px-6 py-4">
-                            {o.ratingEarned ? (
-                              <div className="flex items-center gap-1">
-                                <span className="text-amber-500">{o.ratingEarned}</span>
-                                <StarRating rating={o.ratingEarned} />
-                              </div>
-                            ) : (
-                              <span className="text-slate-300">--</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4">
-                            {o.pointsChange !== undefined ? (
-                              <span className={o.pointsChange >= 0 ? "text-green-600" : "text-rose-500"}>
-                                {o.pointsChange >= 0 ? `+${o.pointsChange}` : o.pointsChange}
-                              </span>
-                            ) : "--"}
-                          </td>
-                          <td className="px-6 py-4 text-green-600">₹{o.isEmergency ? o.surgeFee : "0.00"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="bg-white p-6 rounded-[28px] border border-[#E2EFE7] shadow-sm">
+                  <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest mb-1">Surge Payouts</p>
+                  <p className="text-3xl font-black text-[#1E3A2F]">₹{totalEarnings.toFixed(2)}</p>
                 </div>
               </div>
             )}
