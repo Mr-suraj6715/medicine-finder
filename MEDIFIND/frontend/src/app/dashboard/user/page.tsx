@@ -5,9 +5,7 @@ import {
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles
 } from "lucide-react";
-import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
-
-type AuthUser = { id: string; email: string; name: string; role: string; loyaltyPoints: number };
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
 
 import dynamic from "next/dynamic";
 
@@ -230,6 +228,11 @@ export default function UserDashboard() {
   const fetchAddresses = useCallback(async (uid: string) => {
     try {
       const res = await fetch(`/api/user/address?userId=${uid}`, { headers: getAuthHeaders() });
+      if (res.status === 401) {
+        clearAuthSession();
+        window.location.replace("/?auth=login&role=user");
+        return;
+      }
       const data = await res.json();
       if (data.addresses) setUserAddresses(data.addresses);
     } catch (err) { console.error(err); }
@@ -287,7 +290,16 @@ export default function UserDashboard() {
   };
 
   const handleSaveAddress = async () => {
-    if (!user) return;
+    const token = getAuthToken();
+    if (!user || !token) {
+      setAddressFeedback({ type: "error", msg: "Your session has expired. Please sign in again." });
+      clearAuthSession();
+      setUser(null);
+      setTimeout(() => {
+        window.location.replace("/?auth=login&role=user");
+      }, 1200);
+      return;
+    }
     if (!validateAddressForm()) return;
     setAddressSaving(true);
     setAddressFeedback(null);
@@ -311,6 +323,15 @@ export default function UserDashboard() {
       const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          setAddressFeedback({ type: "error", msg: "Your session has expired. Please sign in again." });
+          clearAuthSession();
+          setUser(null);
+          setTimeout(() => {
+            window.location.replace("/?auth=login&role=user");
+          }, 1200);
+          return;
+        }
         const errMsg = typeof data.detail === "string" ? data.detail : "Failed to save address";
         setAddressFeedback({ type: "error", msg: errMsg });
         return;
@@ -446,37 +467,6 @@ export default function UserDashboard() {
   const handleLogout = () => {
     clearAuthSession();
     window.location.replace("/?auth=login&role=user");
-  };
-
-  const handleAddAddress = async () => {
-    if (!user || !newAddress.address.trim()) return;
-    try {
-      const res = await fetch("/api/user/address", {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ userId: user.id, ...newAddress }),
-      });
-      if (res.ok) {
-        setNewAddress({ label: "Home", address: "" });
-        setShowAddressModal(false);
-        fetchAddresses(user.id);
-      }
-    } catch (err) { console.error(err); }
-  };
-
-  const handleDeleteAddress = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this address?")) return;
-    setDeletingAddressId(id);
-    try {
-      const res = await fetch(`/api/user/address?id=${id}`, { 
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        setUserAddresses(prev => prev.filter(a => a.id !== id));
-      }
-    } catch (err) { console.error(err); }
-    finally { setDeletingAddressId(null); }
   };
 
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);

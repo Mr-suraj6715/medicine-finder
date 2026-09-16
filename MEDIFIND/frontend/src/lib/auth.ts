@@ -68,19 +68,46 @@ export function clearAuthSession() {
 
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem("medifind_token") || getCookie("medifind_token");
+  const token = localStorage.getItem("medifind_token") || getCookie("medifind_token");
+  if (!token || token === "undefined" || token === "null" || token.trim() === "") return null;
+
+  // Validate token expiration if it is a standard JWT
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payload = JSON.parse(atob(parts[1]));
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        clearAuthSession();
+        return null;
+      }
+    }
+  } catch {
+    clearAuthSession();
+    return null;
+  }
+
+  return token;
 }
 
 export function getStoredUser(): AuthUser | null {
   if (typeof window === "undefined") return null;
+  const token = getAuthToken();
+  if (!token) {
+    if (localStorage.getItem("medifind_user")) {
+      clearAuthSession();
+    }
+    return null;
+  }
+
   const activeRole = localStorage.getItem("medifind_active_role") || getCookie("medifind_role");
   const raw = (activeRole ? localStorage.getItem(`medifind_user_${activeRole}`) : null) 
     || localStorage.getItem("medifind_user") 
     || getCookie("medifind_user");
-  if (!raw) return null;
+  if (!raw || raw === "undefined" || raw === "null") return null;
   try {
     return JSON.parse(raw);
   } catch {
+    clearAuthSession();
     return null;
   }
 }
