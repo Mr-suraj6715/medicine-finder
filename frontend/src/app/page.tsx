@@ -88,7 +88,7 @@ import {
   Activity, History, Stethoscope, User, Store, Eye, EyeOff,
   Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award, KeyRound
 } from "lucide-react";
-import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, type AuthUser } from "@/lib/auth";
+import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, getAuthToken, type AuthUser } from "@/lib/auth";
 
 // ─── Types ────────────────────────────────────────────────────────
 type CartItem = { inventory: any; medicine: any; quantity: number };
@@ -990,8 +990,15 @@ export default function Home() {
   };
 
   const handleSaveAddress = async () => {
-    if (!user) {
+    const token = getAuthToken();
+    if (!user || !token) {
       setAddressFeedback({ type: "error", msg: "Please sign in to save delivery addresses." });
+      clearAuthSession();
+      setUser(null);
+      setTimeout(() => {
+        setShowAddressModal(false);
+        setShowLogin(true);
+      }, 1200);
       return;
     }
     if (!validateAddressForm()) return;
@@ -1019,6 +1026,16 @@ export default function Home() {
       const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) {
+        if (res.status === 401) {
+          setAddressFeedback({ type: "error", msg: "Your session has expired. Please sign in again." });
+          clearAuthSession();
+          setUser(null);
+          setTimeout(() => {
+            setShowAddressModal(false);
+            setShowLogin(true);
+          }, 1500);
+          return;
+        }
         const errMsg = typeof data.detail === "string" ? data.detail : Array.isArray(data.detail) ? data.detail.map((d: any) => d.msg || JSON.stringify(d)).join(". ") : "Failed to save address";
         setAddressFeedback({ type: "error", msg: errMsg });
         if (addressModalScrollRef.current) addressModalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
@@ -2452,7 +2469,15 @@ export default function Home() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center px-1">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Delivery Address</p>
-                      <button onClick={() => { resetAddressForm(); setShowAddressModal(true); }} className="text-[10px] text-[#1E3A2F] font-bold hover:underline">+ Add New</button>
+                      <button onClick={() => { 
+                        if (!user || !getAuthToken()) {
+                          setIsCartOpen(false);
+                          setShowLogin(true);
+                          return;
+                        }
+                        resetAddressForm(); 
+                        setShowAddressModal(true); 
+                      }} className="text-[10px] text-[#1E3A2F] font-bold hover:underline">+ Add New</button>
                     </div>
                     {userAddresses.length === 0 ? (
                       <div className="text-[10px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200">No addresses saved. Please add a delivery address to continue.</div>
