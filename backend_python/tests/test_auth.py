@@ -93,3 +93,77 @@ def test_demo_login_succeeds(client):
     assert data["success"] is True
     assert "token" in data
     assert data["user"]["role"] == "user"
+
+def test_forgot_password_flow_complete(client):
+    from email_service import DEV_LAST_RESET_LINKS
+
+    # 1. Request reset link for user@test.com with role "user"
+    resp = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "user@test.com", "role": "user"}
+    )
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+
+    # Check dev mailer link
+    assert "user@test.com" in DEV_LAST_RESET_LINKS
+    raw_token = DEV_LAST_RESET_LINKS["user@test.com"]["token"]
+    assert len(raw_token) > 20
+
+    # 2. Verify valid token
+    verify_resp = client.get(f"/api/auth/reset-password/verify?token={raw_token}")
+    assert verify_resp.status_code == 200
+    assert verify_resp.json()["success"] is True
+
+    # 3. Verify invalid token
+    invalid_resp = client.get("/api/auth/reset-password/verify?token=completely_fake_token_12345")
+    assert invalid_resp.status_code == 400
+
+    # 4. Confirm new password
+    confirm_resp = client.post(
+        "/api/auth/reset-password/confirm",
+        json={"token": raw_token, "newPassword": "newBrandNewPassword123"}
+    )
+    assert confirm_resp.status_code == 200
+    assert confirm_resp.json()["success"] is True
+
+    # 5. Token cannot be reused (single-use)
+    reuse_resp = client.get(f"/api/auth/reset-password/verify?token={raw_token}")
+    assert reuse_resp.status_code == 400
+
+    reuse_confirm = client.post(
+        "/api/auth/reset-password/confirm",
+        json={"token": raw_token, "newPassword": "anotherPassword999"}
+    )
+    assert reuse_confirm.status_code == 400
+
+    # 6. Old password fails
+    old_login = client.post(
+        "/api/auth/login",
+        json={"email": "user@test.com", "password": "password123"}
+    )
+    assert old_login.status_code == 401
+
+    # 7. New password succeeds
+    new_login = client.post(
+        "/api/auth/login",
+        json={"email": "user@test.com", "password": "newBrandNewPassword123"}
+    )
+    assert new_login.status_code == 200
+    assert new_login.json()["success"] is True
+
+def test_forgot_password_role_mismatch_prevents_reset(client):
+    from email_service import DEV_LAST_RESET_LINKS
+    DEV_LAST_RESET_LINKS.clear()
+
+    # user@test.com is a "user", attempting reset as "rider"
+    resp = client.post(
+        "/api/auth/forgot-password",
+        json={"email": "user@test.com", "role": "rider"}
+    )
+    # Generic message to prevent user enumeration
+    assert resp.status_code == 200
+    assert resp.json()["success"] is True
+    # No token generated for rider role
+    assert "user@test.com" not in DEV_LAST_RESET_LINKS
+

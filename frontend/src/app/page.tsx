@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 
@@ -113,9 +113,18 @@ interface PharmacyMarker {
 interface UserAddress {
   id: string;
   label: string;
+  fullName: string | null;
+  phone: string | null;
+  houseNumber: string | null;
+  street: string | null;
+  landmark: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
   address: string;
   latitude: number | null;
   longitude: number | null;
+  isDefault: boolean;
 }
 
 // ─── LeafletMap Sub-Component ─────────────────────────────────────
@@ -673,187 +682,7 @@ function LoginModal({
   );
 }
 
-// ─── Forgot Password Modal ─────────────────────────────────────────
-// Deprecated ForgotPasswordModal (now using standalone page)
-  onClose,
-  initialRole = "user",
-  initialEmail = "",
-  onBackToLogin,
-}: {
-  onClose: () => void;
-  initialRole?: "user" | "shop_owner" | "rider";
-  initialEmail?: string;
-  onBackToLogin: (r: "user" | "shop_owner" | "rider", email?: string) => void;
-}) {
-  const [role, setRole] = useState<"user" | "shop_owner" | "rider">(initialRole);
-  const [email, setEmail] = useState(initialEmail);
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [showPw, setShowPw] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [successMessage, setSuccessMessage] = useState("");
 
-  useEffect(() => {
-    if (initialRole) setRole(initialRole);
-    if (initialEmail) setEmail(initialEmail);
-  }, [initialRole, initialEmail]);
-
-  const handleReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    setSuccessMessage("");
-
-    if (!email.trim()) {
-      setError("Please enter your registered email address.");
-      return;
-    }
-    if (newPassword.length < 6) {
-      setError("Password must be at least 6 characters long.");
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setError("Passwords do not match. Please re-enter.");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim(), newPassword, role }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(formatApiError(data.detail || data.error, "Password reset failed"));
-      setSuccessMessage(data.message || "Password successfully reset! You can now log in.");
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 relative animate-in fade-in zoom-in-95 duration-200">
-        <button onClick={onClose} className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
-        
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-[#1E3A2F] rounded-xl flex items-center justify-center text-white">
-            <KeyRound size={20} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">Reset Password</h2>
-            <p className="text-xs text-slate-500">Choose a new password for your account</p>
-          </div>
-        </div>
-
-        {/* Role Selector */}
-        <div className="flex gap-2 mb-6">
-          {(["user", "shop_owner", "rider"] as const).map(r => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => { setRole(r); setError(""); }}
-              className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
-                role === r ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 text-slate-400"
-              }`}
-            >
-              {r.replace("_", " ")}
-            </button>
-          ))}
-        </div>
-
-        {error && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-700 rounded-xl p-3 mb-4 text-xs font-semibold">
-            {error}
-          </div>
-        )}
-
-        {successMessage ? (
-          <div className="space-y-4 py-2 text-center animate-in fade-in">
-            <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto border-2 border-emerald-100">
-              <CheckCircle size={28} />
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900">Password Reset Complete</h3>
-              <p className="text-xs text-slate-600 mt-1 max-w-xs mx-auto">{successMessage}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => onBackToLogin(role, email)}
-              className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3 rounded-xl font-semibold text-sm transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
-            >
-              Sign In Now <ArrowRight size={15} />
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleReset} className="space-y-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Registered Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                placeholder="you@email.com"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">New Password</label>
-              <div className="relative">
-                <input
-                  type={showPw ? "text" : "password"}
-                  value={newPassword}
-                  onChange={e => setNewPassword(e.target.value)}
-                  placeholder="Min 6 characters"
-                  className="w-full border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(!showPw)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  {showPw ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-1.5">Confirm New Password</label>
-              <input
-                type={showPw ? "text" : "password"}
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                placeholder="Repeat new password"
-                className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] bg-slate-50"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3 rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-60 shadow-md"
-            >
-              {loading ? "Updating Password..." : "Reset Password"}
-            </button>
-            <div className="mt-4 text-center text-sm">
-              <button
-                type="button"
-                onClick={() => onBackToLogin(role, email)}
-                className="text-[#1E3A2F] font-semibold hover:underline flex items-center justify-center gap-1 mx-auto"
-              >
-                ← Back to Sign In
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 
 // ─── Signup Modal ─────────────────────────────────────────────────
@@ -1011,7 +840,12 @@ export default function Home() {
   const [userAddresses, setUserAddresses] = useState<UserAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [showAddressModal, setShowAddressModal] = useState(false);
-  const [newAddress, setNewAddress] = useState({ label: "Home", address: "" });
+  const [editingAddress, setEditingAddress] = useState<UserAddress | null>(null);
+  const [addressForm, setAddressForm] = useState({ label: "Home", fullName: "", phone: "", houseNumber: "", street: "", landmark: "", city: "", state: "", pincode: "", isDefault: false });
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [addressFeedback, setAddressFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
+  const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [visibleMedicineCount, setVisibleMedicineCount] = useState(3);
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -1066,7 +900,10 @@ export default function Home() {
       const data = await res.json();
       if (data.addresses) {
         setUserAddresses(data.addresses);
-        if (data.addresses.length > 0) setSelectedAddressId(data.addresses[0].id);
+        // Prefer the default address; fallback to first
+        const def = data.addresses.find((a: UserAddress) => a.isDefault);
+        if (def) setSelectedAddressId(def.id);
+        else if (data.addresses.length > 0) setSelectedAddressId(data.addresses[0].id);
       }
     } catch (err) { console.error(err); }
   }, []);
@@ -1096,24 +933,149 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const handleAddAddress = async () => {
-    if (!user || !newAddress.address.trim()) return;
-    try {
-      const res = await fetch("/api/user/address", {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          userId: user.id,
-          ...newAddress,
-          latitude: userLocation?.lat,
-          longitude: userLocation?.lng
-        })
-      });
-      if (res.ok) {
-        setNewAddress({ label: "Home", address: "" });
-        setShowAddressModal(false);
-        fetchAddresses(user.id);
+  const addressModalScrollRef = useRef<HTMLDivElement>(null);
+
+  const resetAddressForm = () => {
+    setAddressForm({
+      label: "Home",
+      fullName: user?.name || "",
+      phone: user?.phone || "",
+      houseNumber: "",
+      street: "",
+      landmark: "",
+      city: "Mumbai",
+      state: "Maharashtra",
+      pincode: "",
+      isDefault: false
+    });
+    setAddressErrors({});
+    setAddressFeedback(null);
+    setEditingAddress(null);
+  };
+
+  const validateAddressForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
+      errs.fullName = "Full name is required (min 2 characters)";
+    }
+    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221)";
+    }
+    if (!addressForm.houseNumber.trim()) {
+      errs.houseNumber = "House / Flat / Building is required";
+    }
+    if (!addressForm.street.trim() || addressForm.street.trim().length < 2) {
+      errs.street = "Street / Area is required (min 2 characters)";
+    }
+    if (!addressForm.city.trim() || addressForm.city.trim().length < 2) {
+      errs.city = "City is required";
+    }
+    if (!addressForm.state.trim() || addressForm.state.trim().length < 2) {
+      errs.state = "State is required";
+    }
+    const cleanPin = addressForm.pincode.trim();
+    if (!/^[1-9][0-9]{5}$/.test(cleanPin)) {
+      errs.pincode = "Enter a valid 6-digit Indian PIN code (e.g. 400001)";
+    }
+    setAddressErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setAddressFeedback({ type: "error", msg: "Please fill all required fields highlighted in red." });
+      if (addressModalScrollRef.current) {
+        addressModalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
       }
+      return false;
+    }
+    return true;
+  };
+
+  const handleSaveAddress = async () => {
+    if (!user) {
+      setAddressFeedback({ type: "error", msg: "Please sign in to save delivery addresses." });
+      return;
+    }
+    if (!validateAddressForm()) return;
+    setAddressSaving(true);
+    setAddressFeedback(null);
+    try {
+      const isEditing = !!editingAddress;
+      const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
+      const method = isEditing ? "PUT" : "POST";
+      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      const payload: any = {
+        ...addressForm,
+        fullName: addressForm.fullName.trim(),
+        phone: cleanPhone,
+        houseNumber: addressForm.houseNumber.trim(),
+        street: addressForm.street.trim(),
+        landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
+        city: addressForm.city.trim(),
+        state: addressForm.state.trim(),
+        pincode: addressForm.pincode.trim(),
+        latitude: userLocation?.lat || null,
+        longitude: userLocation?.lng || null
+      };
+      if (!isEditing) payload.userId = user.id;
+      const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) {
+        const errMsg = typeof data.detail === "string" ? data.detail : Array.isArray(data.detail) ? data.detail.map((d: any) => d.msg || JSON.stringify(d)).join(". ") : "Failed to save address";
+        setAddressFeedback({ type: "error", msg: errMsg });
+        if (addressModalScrollRef.current) addressModalScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      setAddressFeedback({ type: "success", msg: isEditing ? "Address updated successfully!" : "Address saved successfully!" });
+      if (data.address) {
+        setSelectedAddressId(data.address.id);
+      }
+      await fetchAddresses(user.id);
+      setTimeout(() => { setShowAddressModal(false); resetAddressForm(); }, 800);
+    } catch (err) {
+      setAddressFeedback({ type: "error", msg: "Unable to save address. Please try again." });
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  const handleDeleteAddress = async (addrId: string) => {
+    if (!user) return;
+    try {
+      const res = await fetch(`/api/user/address?id=${addrId}`, { method: "DELETE", headers: getAuthHeaders() });
+      if (res.ok) {
+        fetchAddresses(user.id);
+        if (selectedAddressId === addrId) setSelectedAddressId("");
+      }
+    } catch (err) { console.error(err); }
+    setShowDeleteConfirm(null);
+  };
+
+  const handleEditAddress = (addr: UserAddress) => {
+    setEditingAddress(addr);
+    setAddressForm({
+      label: addr.label || "Home",
+      fullName: addr.fullName || "",
+      phone: addr.phone || "",
+      houseNumber: addr.houseNumber || "",
+      street: addr.street || "",
+      landmark: addr.landmark || "",
+      city: addr.city || "",
+      state: addr.state || "",
+      pincode: addr.pincode || "",
+      isDefault: addr.isDefault || false,
+    });
+    setAddressErrors({});
+    setAddressFeedback(null);
+    setShowAddressModal(true);
+  };
+
+  const handleSetDefault = async (addrId: string) => {
+    if (!user) return;
+    try {
+      await fetch(`/api/user/address?id=${addrId}`, {
+        method: "PUT", headers: getAuthHeaders(),
+        body: JSON.stringify({ isDefault: true })
+      });
+      fetchAddresses(user.id);
     } catch (err) { console.error(err); }
   };
   const [showOrderSuccess, setShowOrderSuccess] = useState(false);
@@ -1502,13 +1464,7 @@ export default function Home() {
           initialRole={authModalRole}
           initialEmail={authModalEmail}
           onClose={() => setShowLogin(false)} 
-          onSuccess={handleAuthSuccess} 
-          // onForgotPassword removed; navigation handled by /forgot-password page
-            setAuthModalRole(r);
-            if (em) setAuthModalEmail(em);
-            setShowLogin(false);
-            router.push('/forgot-password');
-          }}
+          onSuccess={handleAuthSuccess}
           onSwitch={(r) => { 
             setAuthModalRole(r);
             setShowLogin(false); 
@@ -2404,11 +2360,14 @@ export default function Home() {
         <div className="fixed inset-0 z-[100]">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
           <div className="absolute right-0 top-0 bottom-0 w-full max-w-sm bg-white shadow-2xl flex flex-col">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center">
+            {/* Fixed Header */}
+            <div className="p-5 border-b border-slate-100 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShoppingCart size={18} className="text-[#1E3A2F]" /> Your Cart ({cart.length})</h2>
               <button onClick={() => setIsCartOpen(false)} className="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
             </div>
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+
+            {/* Scrollable body — cart items + all config sections */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-5 space-y-3">
               {cart.length === 0 ? (
                 <div className="text-center py-16 text-slate-400">
                   <ShoppingCart size={40} className="mx-auto mb-3 opacity-30" />
@@ -2428,121 +2387,157 @@ export default function Home() {
                   </div>
                 </div>
               ))}
-            </div>
-            {cart.length > 0 && (
-              <div className="p-5 border-t border-slate-100 space-y-4">
-                <div className={`p-4 rounded-2xl border-2 transition-all ${isEmergencyMode ? "border-rose-500 bg-rose-50" : "border-slate-100 bg-slate-50"}`}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isEmergencyMode ? "bg-rose-500 text-white" : "bg-slate-200 text-slate-500"}`}>
-                        <Activity size={16} className={isEmergencyMode ? "animate-pulse" : ""} />
+
+              {cart.length > 0 && (
+                <div className="space-y-4 pt-1">
+                  {/* Emergency Mode */}
+                  <div className={`p-4 rounded-2xl border-2 transition-all ${isEmergencyMode ? "border-rose-500 bg-rose-50" : "border-slate-100 bg-slate-50"}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isEmergencyMode ? "bg-rose-500 text-white" : "bg-slate-200 text-slate-500"}`}>
+                          <Activity size={16} className={isEmergencyMode ? "animate-pulse" : ""} />
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-900 uppercase tracking-wide">Emergency Mode</p>
+                          <p className="text-[10px] text-slate-500 font-medium">Faster delivery with surge fee</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-black text-slate-900 uppercase tracking-wide">Emergency Mode</p>
-                        <p className="text-[10px] text-slate-500 font-medium">Faster delivery with surge fee</p>
-                      </div>
+                      <button
+                        onClick={() => {
+                          if (!isEmergencyMode) setShowEmergencyModal(true);
+                          else setIsEmergencyMode(false);
+                        }}
+                        className={`w-10 h-5 rounded-full relative transition-colors ${isEmergencyMode ? "bg-rose-500" : "bg-slate-300"}`}
+                      >
+                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isEmergencyMode ? "right-1" : "left-1"}`} />
+                      </button>
                     </div>
+                  </div>
+
+                  {/* Fulfilling Medical Shop & Route Preview */}
+                  <div className="bg-[#F0F7F3] p-3.5 rounded-2xl border border-[#D0E7D8] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-[#1E3A2F] flex items-center gap-1.5">
+                        <Store size={13} /> Fulfilling Medical Shop
+                      </span>
+                      <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-[#C5E1CE]">
+                        {cartPharmacyDistance.toFixed(1)} km away
+                      </span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800 truncate">
+                      {cartPharmacy?.name || "Verified Medical Shop"}
+                    </p>
+                    <p className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
+                      <MapPin size={10} /> {cartPharmacy?.location || "Mumbai, Maharashtra"}
+                    </p>
+                    <p className="text-[11px] text-[#1E3A2F] font-semibold bg-white/80 p-2 rounded-xl border border-[#D5EAE0] leading-snug">
+                      📍 This medical shop is approximately {cartPharmacyDistance.toFixed(1)} km away from your location.
+                    </p>
                     <button
                       onClick={() => {
-                        if (!isEmergencyMode) setShowEmergencyModal(true);
-                        else setIsEmergencyMode(false);
+                        if (cartPharmacy) {
+                          setRouteModalPharmacy(cartPharmacy);
+                          setRouteModalMedicine(cart[0]?.medicine || selectedMedicine);
+                          setRouteModalQuantity(cart[0]?.quantity || 1);
+                          setIsRouteModalOpen(true);
+                        }
                       }}
-                      className={`w-10 h-5 rounded-full relative transition-colors ${isEmergencyMode ? "bg-rose-500" : "bg-slate-300"}`}
+                      className="w-full bg-white hover:bg-[#E2F0E7] border border-[#BBDCC6] text-[#1E3A2F] py-2.5 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${isEmergencyMode ? "right-1" : "left-1"}`} />
+                      <MapIcon size={13} /> View Route on Map
                     </button>
                   </div>
-                </div>
 
-                {/* Fulfilling Medical Shop & Route Preview (Requirements 3, 4, 7, 8) */}
-                <div className="bg-[#F0F7F3] p-3.5 rounded-2xl border border-[#D0E7D8] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-[#1E3A2F] flex items-center gap-1.5">
-                      <Store size={13} /> Fulfilling Medical Shop
-                    </span>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-white px-2 py-0.5 rounded-md border border-[#C5E1CE]">
-                      {cartPharmacyDistance.toFixed(1)} km away
-                    </span>
-                  </div>
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    {cartPharmacy?.name || "Verified Medical Shop"}
-                  </p>
-                  <p className="text-[10px] text-slate-500 flex items-center gap-1 truncate">
-                    <MapPin size={10} /> {cartPharmacy?.location || "Mumbai, Maharashtra"}
-                  </p>
-                  <p className="text-[11px] text-[#1E3A2F] font-semibold bg-white/80 p-2 rounded-xl border border-[#D5EAE0] leading-snug">
-                    📍 This medical shop is approximately {cartPharmacyDistance.toFixed(1)} km away from your location.
-                  </p>
-                  <button
-                    onClick={() => {
-                      if (cartPharmacy) {
-                        setRouteModalPharmacy(cartPharmacy);
-                        setRouteModalMedicine(cart[0]?.medicine || selectedMedicine);
-                        setRouteModalQuantity(cart[0]?.quantity || 1);
-                        setIsRouteModalOpen(true);
-                      }
-                    }}
-                    className="w-full bg-white hover:bg-[#E2F0E7] border border-[#BBDCC6] text-[#1E3A2F] py-2.5 rounded-xl text-xs font-black transition-colors flex items-center justify-center gap-1.5 shadow-sm"
-                  >
-                    <MapIcon size={13} /> View Route on Map
-                  </button>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center px-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Delivery Address</p>
-                    <button onClick={() => setShowAddressModal(true)} className="text-[10px] text-[#1E3A2F] font-bold hover:underline">+ Add New</button>
-                  </div>
-                  {userAddresses.length === 0 ? (
-                    <div className="text-[10px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200">No addresses saved. Please add one to continue.</div>
-                  ) : (
-                    <select 
-                      value={selectedAddressId} 
-                      onChange={(e) => setSelectedAddressId(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F] font-medium"
-                    >
-                      {userAddresses.map(addr => (
-                        <option key={addr.id} value={addr.id}>{addr.label}: {addr.address}</option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none px-1">Payment Method</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button 
-                      onClick={() => setPaymentMethod("CASH_ON_DELIVERY")}
-                      className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all border-2 ${paymentMethod === "CASH_ON_DELIVERY" ? "border-slate-800 bg-slate-800 text-white" : "border-slate-100 bg-slate-50 text-slate-400"}`}
-                    >
-                      Cash On Delivery
-                    </button>
-                    <button 
-                      onClick={() => setPaymentMethod("ONLINE")}
-                      className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all border-2 ${paymentMethod === "ONLINE" ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 bg-slate-50 text-slate-400"}`}
-                    >
-                      Online Payment
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-sm space-y-1.5 pt-2 border-t border-slate-50">
-                  <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₹{cartSubtotal.toFixed(2)}</span></div>
-                  {cartDiscount > 0 && <div className="flex justify-between text-emerald-700 font-medium"><span>Bulk discount (10%)</span><span>-₹{cartDiscount.toFixed(2)}</span></div>}
-                  {isEmergencyMode && (
-                    <div className="flex justify-between text-rose-600 font-bold">
-                      <span className="flex items-center gap-1"><Navigation size={13} /> Emergency Delivery Fee</span>
-                      <span>+₹{emergencyFee.toFixed(2)}</span>
+                  {/* Delivery Address */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center px-1">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Delivery Address</p>
+                      <button onClick={() => { resetAddressForm(); setShowAddressModal(true); }} className="text-[10px] text-[#1E3A2F] font-bold hover:underline">+ Add New</button>
                     </div>
-                  )}
-                  <div className="flex justify-between font-black text-base border-t pt-2">
-                    <span>Total</span>
-                    <span className={isEmergencyMode ? "text-rose-600" : "text-[#1E3A2F]"}>₹{cartFinalWithEmergency.toFixed(2)}</span>
+                    {userAddresses.length === 0 ? (
+                      <div className="text-[10px] text-slate-400 bg-slate-50 p-3 rounded-xl border border-dashed border-slate-200">No addresses saved. Please add a delivery address to continue.</div>
+                    ) : (
+                      <div className="space-y-2">
+                        <select
+                          value={selectedAddressId}
+                          onChange={(e) => setSelectedAddressId(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F] font-medium"
+                        >
+                          {userAddresses.map(addr => (
+                            <option key={addr.id} value={addr.id}>{addr.isDefault ? '★ ' : ''}{addr.label}: {addr.fullName ? `${addr.fullName}, ` : ''}{addr.address}</option>
+                          ))}
+                        </select>
+                        {/* Show selected address details */}
+                        {(() => {
+                          const sel = userAddresses.find(a => a.id === selectedAddressId);
+                          if (!sel) return null;
+                          return (
+                            <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100 text-[10px] space-y-1">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="font-bold text-slate-800 text-xs">{sel.fullName || 'N/A'}{sel.isDefault && <span className="ml-1.5 text-[9px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-md font-black">DEFAULT</span>}</p>
+                                  <p className="text-slate-500">{sel.phone || ''}</p>
+                                </div>
+                                <div className="flex gap-1 shrink-0">
+                                  <button onClick={() => handleEditAddress(sel)} className="text-[9px] text-blue-600 hover:underline font-bold">Edit</button>
+                                  {!sel.isDefault && <button onClick={() => handleSetDefault(sel.id)} className="text-[9px] text-emerald-600 hover:underline font-bold">Set Default</button>}
+                                </div>
+                              </div>
+                              <p className="text-slate-600 leading-snug">{sel.address}</p>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Payment Method */}
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none px-1">Payment Method</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => setPaymentMethod("CASH_ON_DELIVERY")}
+                        className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all border-2 ${paymentMethod === "CASH_ON_DELIVERY" ? "border-slate-800 bg-slate-800 text-white" : "border-slate-100 bg-slate-50 text-slate-400"}`}
+                      >
+                        Cash On Delivery
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod("ONLINE")}
+                        className={`py-2 rounded-lg text-[9px] font-black uppercase transition-all border-2 ${paymentMethod === "ONLINE" ? "border-[#1E3A2F] bg-[#E8F3ED] text-[#1E3A2F]" : "border-slate-100 bg-slate-50 text-slate-400"}`}
+                      >
+                        Online Payment
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Order Summary */}
+                  <div className="text-sm space-y-1.5 pt-2 border-t border-slate-100 pb-2">
+                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₹{cartSubtotal.toFixed(2)}</span></div>
+                    {cartDiscount > 0 && <div className="flex justify-between text-emerald-700 font-medium"><span>Bulk discount (10%)</span><span>-₹{cartDiscount.toFixed(2)}</span></div>}
+                    {isEmergencyMode && (
+                      <div className="flex justify-between text-rose-600 font-bold">
+                        <span className="flex items-center gap-1"><Navigation size={13} /> Emergency Delivery Fee</span>
+                        <span>+₹{emergencyFee.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-black text-base border-t pt-2">
+                      <span>Total</span>
+                      <span className={isEmergencyMode ? "text-rose-600" : "text-[#1E3A2F]"}>₹{cartFinalWithEmergency.toFixed(2)}</span>
+                    </div>
                   </div>
                 </div>
-                {!user && <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-xl text-center">Please <button onClick={() => { setIsCartOpen(false); setShowLogin(true); }} className="underline font-bold">sign in</button> to checkout</p>}
-                <button onClick={user ? handlePlaceOrder : () => { setIsCartOpen(false); setShowLogin(true); }} disabled={isOrdering}
-                  className={`w-full ${isEmergencyMode ? "bg-rose-500 hover:bg-rose-600" : "bg-[#1E3A2F] hover:bg-[#152a22]"} text-white py-3.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg`}>
+              )}
+            </div>
+
+            {/* Sticky Checkout Footer — always visible, never scrolls away */}
+            {cart.length > 0 && (
+              <div className="shrink-0 p-4 border-t border-slate-100 bg-white">
+                {!user && <p className="text-xs text-amber-600 bg-amber-50 p-2 rounded-xl text-center mb-3">Please <button onClick={() => { setIsCartOpen(false); setShowLogin(true); }} className="underline font-bold">sign in</button> to checkout</p>}
+                <button
+                  onClick={user ? handlePlaceOrder : () => { setIsCartOpen(false); setShowLogin(true); }}
+                  disabled={isOrdering}
+                  className={`w-full ${isEmergencyMode ? "bg-rose-500 hover:bg-rose-600" : "bg-[#1E3A2F] hover:bg-[#152a22]"} text-white py-3.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg disabled:opacity-60`}
+                >
                   {isOrdering ? "Placing order…" : <>{isEmergencyMode ? <Activity size={16} /> : <ShoppingCart size={16} />} Checkout — ₹{cartFinalWithEmergency.toFixed(2)}</>}
                 </button>
               </div>
@@ -2718,33 +2713,130 @@ export default function Home() {
       {/* ── ADDRESS MODAL ── */}
       {showAddressModal && (
         <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative animate-in fade-in zoom-in-95 duration-200">
-            <button onClick={() => setShowAddressModal(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
-            <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center gap-2"><MapPin className="text-[#1E3A2F]" /> New Delivery Address</h3>
-            <div className="space-y-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 pb-4 border-b border-slate-100 shrink-0 flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2"><MapPin className="text-[#1E3A2F]" size={20} /> {editingAddress ? 'Edit Address' : 'New Delivery Address'}</h3>
+              <button onClick={() => { setShowAddressModal(false); resetAddressForm(); }} className="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div ref={addressModalScrollRef} className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-4">
+              {/* Feedback banner */}
+              {addressFeedback && (
+                <div className={`p-3 rounded-xl text-sm font-medium ${addressFeedback.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-700' : 'bg-red-50 border border-red-200 text-red-700'}`}>
+                  {addressFeedback.msg}
+                </div>
+              )}
+
+              {/* Label */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Label</label>
                 <div className="flex gap-2">
                   {["Home", "Work", "Other"].map(l => (
-                    <button key={l} onClick={() => setNewAddress(p => ({ ...p, label: l }))} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${newAddress.label === l ? "bg-[#E8F3ED] border-[#1E3A2F] text-[#1E3A2F]" : "bg-slate-50 border-slate-100 text-slate-500"}`}>{l}</button>
+                    <button key={l} onClick={() => setAddressForm(p => ({ ...p, label: l }))} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${addressForm.label === l ? "bg-[#E8F3ED] border-[#1E3A2F] text-[#1E3A2F]" : "bg-slate-50 border-slate-100 text-slate-500"}`}>{l}</button>
                   ))}
                 </div>
               </div>
+
+              {/* Full Name */}
               <div>
-                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Full Address</label>
-                <textarea 
-                  value={newAddress.address} 
-                  onChange={e => setNewAddress(p => ({ ...p, address: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] min-h-[100px] resize-none text-slate-900"
-                  placeholder="Street, Landmark, Apartment, City..."
-                />
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                <input value={addressForm.fullName} onChange={e => setAddressForm(p => ({ ...p, fullName: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.fullName ? 'border-rose-400' : 'border-slate-200'}`} placeholder="Recipient full name" />
+                {addressErrors.fullName && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.fullName}</p>}
               </div>
-              <button 
-                onClick={handleAddAddress}
-                className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-95 hover:bg-[#152a22]"
+
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? 'border-rose-400' : 'border-slate-200'}`} placeholder="10-digit mobile number" maxLength={10} />
+                {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
+              </div>
+
+              {/* House / Flat */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">House / Flat / Building <span className="text-rose-500">*</span></label>
+                <input value={addressForm.houseNumber} onChange={e => setAddressForm(p => ({ ...p, houseNumber: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.houseNumber ? 'border-rose-400' : 'border-slate-200'}`} placeholder="e.g., B-204, Sunshine Apartments" />
+                {addressErrors.houseNumber && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.houseNumber}</p>}
+              </div>
+
+              {/* Street / Area */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
+                <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? 'border-rose-400' : 'border-slate-200'}`} placeholder="e.g., MG Road, Andheri West" />
+                {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Landmark (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Landmark <span className="text-slate-300">(Optional)</span></label>
+                <input value={addressForm.landmark} onChange={e => setAddressForm(p => ({ ...p, landmark: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="Near Station, Opposite Mall..." />
+              </div>
+
+              {/* City + State row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">City <span className="text-rose-500">*</span></label>
+                  <input value={addressForm.city} onChange={e => setAddressForm(p => ({ ...p, city: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.city ? 'border-rose-400' : 'border-slate-200'}`} placeholder="Mumbai" />
+                  {addressErrors.city && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.city}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">State <span className="text-rose-500">*</span></label>
+                  <input value={addressForm.state} onChange={e => setAddressForm(p => ({ ...p, state: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.state ? 'border-rose-400' : 'border-slate-200'}`} placeholder="Maharashtra" />
+                  {addressErrors.state && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.state}</p>}
+                </div>
+              </div>
+
+              {/* PIN Code */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">PIN Code <span className="text-rose-500">*</span></label>
+                <input value={addressForm.pincode} onChange={e => setAddressForm(p => ({ ...p, pincode: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.pincode ? 'border-rose-400' : 'border-slate-200'}`} placeholder="6-digit PIN code" maxLength={6} />
+                {addressErrors.pincode && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.pincode}</p>}
+              </div>
+
+              {/* Set as Default checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <input type="checkbox" checked={addressForm.isDefault} onChange={e => setAddressForm(p => ({ ...p, isDefault: e.target.checked }))} className="w-4 h-4 rounded border-slate-300 text-[#1E3A2F] focus:ring-[#1E3A2F]" />
+                <span className="text-xs font-bold text-slate-700">Set as default delivery address</span>
+              </label>
+
+              {/* Delete button (only when editing) */}
+              {editingAddress && (
+                <button
+                  onClick={() => setShowDeleteConfirm(editingAddress.id)}
+                  className="w-full py-2 text-xs font-bold text-rose-500 hover:bg-rose-50 rounded-xl border border-rose-100 transition-colors"
+                >
+                  Delete This Address
+                </button>
+              )}
+            </div>
+
+            {/* Sticky footer with Save button */}
+            <div className="p-6 pt-4 border-t border-slate-100 shrink-0">
+              <button
+                onClick={handleSaveAddress}
+                disabled={addressSaving}
+                className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-95 hover:bg-[#152a22] disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Save Address
+                {addressSaving ? (
+                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                ) : editingAddress ? 'Update Address' : 'Save Address'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── DELETE ADDRESS CONFIRM ── */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center animate-in fade-in zoom-in-95 duration-150">
+            <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-3"><X size={22} className="text-rose-500" /></div>
+            <h4 className="font-bold text-slate-900 mb-1">Delete Address?</h4>
+            <p className="text-xs text-slate-500 mb-5">This action cannot be undone. Historical orders will keep their delivery address.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowDeleteConfirm(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50">Cancel</button>
+              <button onClick={() => { handleDeleteAddress(showDeleteConfirm); setShowAddressModal(false); resetAddressForm(); }} className="flex-1 py-2.5 rounded-xl bg-rose-500 text-white font-bold text-xs hover:bg-rose-600">Delete</button>
             </div>
           </div>
         </div>

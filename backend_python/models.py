@@ -89,12 +89,26 @@ class Address(Base):
     __tablename__ = "Address"
 
     id = Column(String, primary_key=True, index=True)
-    label = Column(String, nullable=False)
-    address = Column(String, nullable=False)
+    userId = Column(String, ForeignKey("User.id"), nullable=False)
+    label = Column(String, nullable=False, default="Home")
+    # Structured fields
+    fullName = Column(String, nullable=True)
+    phone = Column(String, nullable=True)
+    houseNumber = Column(String, nullable=True)
+    street = Column(String, nullable=True)
+    landmark = Column(String, nullable=True)
+    city = Column(String, nullable=True)
+    state = Column(String, nullable=True)
+    pincode = Column(String, nullable=True)
+    # Legacy single-text field — kept for backward compatibility
+    address = Column(String, nullable=True)
+    # Geo
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    userId = Column(String, ForeignKey("User.id"), nullable=False)
+    # Default flag — only one per user should be True
+    isDefault = Column(Boolean, default=False)
     createdAt = Column(String, nullable=True)
+    updatedAt = Column(String, nullable=True)
 
     user = relationship("User", back_populates="addresses")
 

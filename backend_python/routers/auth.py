@@ -197,11 +197,15 @@ def _generate_password_reset_token() -> tuple[str, str]:
 def forgot_password(req: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
     try:
         email = req.email.lower().strip()
+        role = (req.role or "user").strip().lower()
         # Rate limiting per email address
         if not check_reset_rate_limit(email):
             raise HTTPException(status_code=429, detail="Too many password reset requests. Please try again later.")
 
-        user = db.query(models.User).filter(models.User.email == email).first()
+        query = db.query(models.User).filter(models.User.email == email)
+        if role in ["user", "shop_owner", "rider"]:
+            query = query.filter(models.User.role == role)
+        user = query.first()
         # Generic response to avoid user enumeration
         generic_msg = {"success": True, "message": "If an account exists, a password reset link has been sent to the provided email."}
         if not user:
@@ -242,7 +246,7 @@ def verify_reset_token(token: str, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as err:
-        raise HTTPException(status_code=5  00, detail=f"Internal server error: {str(err)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(err)}")
 
 # 3. Confirm reset password using token
 @router.post("/reset-password/confirm")

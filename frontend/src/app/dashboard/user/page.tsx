@@ -5,9 +5,7 @@ import {
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles
 } from "lucide-react";
-import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
-
-type AuthUser = { id: string; email: string; name: string; role: string; loyaltyPoints: number };
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, AuthUser } from "@/lib/auth";
 
 import dynamic from "next/dynamic";
 
@@ -208,7 +206,22 @@ export default function UserDashboard() {
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [userAddresses, setUserAddresses] = useState<any[]>([]);
   const [showAddressModal, setShowAddressModal] = useState(false);
-  const [newAddress, setNewAddress] = useState({ label: "Home", address: "" });
+  const [addressForm, setAddressForm] = useState({
+    label: "Home",
+    fullName: "",
+    phone: "",
+    houseNumber: "",
+    street: "",
+    landmark: "",
+    city: "Mumbai",
+    state: "Maharashtra",
+    pincode: "",
+    isDefault: false
+  });
+  const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
+  const [addressFeedback, setAddressFeedback] = useState<{ type: "error" | "success"; msg: string } | null>(null);
+  const [addressSaving, setAddressSaving] = useState(false);
+  const [editingAddress, setEditingAddress] = useState<any>(null);
   const [deletingAddressId, setDeletingAddressId] = useState<string | null>(null);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
 
@@ -219,6 +232,142 @@ export default function UserDashboard() {
       if (data.addresses) setUserAddresses(data.addresses);
     } catch (err) { console.error(err); }
   }, []);
+
+  const resetAddressForm = () => {
+    setAddressForm({
+      label: "Home",
+      fullName: user?.name || "",
+      phone: user?.phone || "",
+      houseNumber: "",
+      street: "",
+      landmark: "",
+      city: "Mumbai",
+      state: "Maharashtra",
+      pincode: "",
+      isDefault: false
+    });
+    setAddressErrors({});
+    setAddressFeedback(null);
+    setEditingAddress(null);
+  };
+
+  const validateAddressForm = (): boolean => {
+    const errs: Record<string, string> = {};
+    if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
+      errs.fullName = "Full name is required (min 2 characters)";
+    }
+    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
+      errs.phone = "Enter a valid 10-digit Indian mobile number";
+    }
+    if (!addressForm.houseNumber.trim()) {
+      errs.houseNumber = "House / Flat / Building is required";
+    }
+    if (!addressForm.street.trim() || addressForm.street.trim().length < 2) {
+      errs.street = "Street / Area is required";
+    }
+    if (!addressForm.city.trim() || addressForm.city.trim().length < 2) {
+      errs.city = "City is required";
+    }
+    if (!addressForm.state.trim() || addressForm.state.trim().length < 2) {
+      errs.state = "State is required";
+    }
+    const cleanPin = addressForm.pincode.trim();
+    if (!/^[1-9][0-9]{5}$/.test(cleanPin)) {
+      errs.pincode = "Enter a valid 6-digit Indian PIN code";
+    }
+    setAddressErrors(errs);
+    if (Object.keys(errs).length > 0) {
+      setAddressFeedback({ type: "error", msg: "Please fill all required fields correctly." });
+      return false;
+    }
+    return true;
+  };
+
+  const handleSaveAddress = async () => {
+    if (!user) return;
+    if (!validateAddressForm()) return;
+    setAddressSaving(true);
+    setAddressFeedback(null);
+    try {
+      const isEditing = !!editingAddress;
+      const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
+      const method = isEditing ? "PUT" : "POST";
+      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      const payload: any = {
+        ...addressForm,
+        fullName: addressForm.fullName.trim(),
+        phone: cleanPhone,
+        houseNumber: addressForm.houseNumber.trim(),
+        street: addressForm.street.trim(),
+        landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
+        city: addressForm.city.trim(),
+        state: addressForm.state.trim(),
+        pincode: addressForm.pincode.trim(),
+      };
+      if (!isEditing) payload.userId = user.id;
+      const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
+      const data = await res.json();
+      if (!res.ok) {
+        const errMsg = typeof data.detail === "string" ? data.detail : "Failed to save address";
+        setAddressFeedback({ type: "error", msg: errMsg });
+        return;
+      }
+      setAddressFeedback({ type: "success", msg: isEditing ? "Address updated successfully!" : "Address saved successfully!" });
+      await fetchAddresses(user.id);
+      setTimeout(() => { setShowAddressModal(false); resetAddressForm(); }, 800);
+    } catch (err) {
+      setAddressFeedback({ type: "error", msg: "Unable to save address. Please try again." });
+    } finally {
+      setAddressSaving(false);
+    }
+  };
+
+  const handleEditAddress = (addr: any) => {
+    setEditingAddress(addr);
+    setAddressForm({
+      label: addr.label || "Home",
+      fullName: addr.fullName || "",
+      phone: addr.phone || "",
+      houseNumber: addr.houseNumber || "",
+      street: addr.street || "",
+      landmark: addr.landmark || "",
+      city: addr.city || "",
+      state: addr.state || "",
+      pincode: addr.pincode || "",
+      isDefault: addr.isDefault || false,
+    });
+    setAddressErrors({});
+    setAddressFeedback(null);
+    setShowAddressModal(true);
+  };
+
+  const handleSetDefault = async (addrId: string) => {
+    if (!user) return;
+    try {
+      await fetch(`/api/user/address?id=${addrId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ isDefault: true }),
+      });
+      fetchAddresses(user.id);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleDeleteAddress = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this address?")) return;
+    setDeletingAddressId(id);
+    try {
+      const res = await fetch(`/api/user/address?id=${id}`, { 
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      if (res.ok) {
+        fetchAddresses(user.id);
+      }
+    } catch (err) { console.error(err); }
+    finally { setDeletingAddressId(null); }
+  };
 
   const [healthLogs, setHealthLogs] = useState<any[]>([]);
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
@@ -295,37 +444,6 @@ export default function UserDashboard() {
   const handleLogout = () => {
     clearAuthSession();
     window.location.replace("/?auth=login&role=user");
-  };
-
-  const handleAddAddress = async () => {
-    if (!user || !newAddress.address.trim()) return;
-    try {
-      const res = await fetch("/api/user/address", {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ userId: user.id, ...newAddress }),
-      });
-      if (res.ok) {
-        setNewAddress({ label: "Home", address: "" });
-        setShowAddressModal(false);
-        fetchAddresses(user.id);
-      }
-    } catch (err) { console.error(err); }
-  };
-
-  const handleDeleteAddress = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this address?")) return;
-    setDeletingAddressId(id);
-    try {
-      const res = await fetch(`/api/user/address?id=${id}`, { 
-        method: "DELETE",
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        setUserAddresses(prev => prev.filter(a => a.id !== id));
-      }
-    } catch (err) { console.error(err); }
-    finally { setDeletingAddressId(null); }
   };
 
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);
@@ -574,10 +692,10 @@ export default function UserDashboard() {
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] shadow-sm p-8">
               <div className="flex justify-between items-center mb-6">
                 <h4 className="font-black text-slate-900 text-sm uppercase tracking-widest">Saved Addresses</h4>
-                <button onClick={() => setShowAddressModal(true)} className="text-xs text-[#1E3A2F] font-black uppercase tracking-wider hover:underline">+ Add New</button>
+                <button onClick={() => { resetAddressForm(); setShowAddressModal(true); }} className="text-xs text-[#1E3A2F] font-black uppercase tracking-wider hover:underline">+ Add New</button>
               </div>
               {userAddresses.length === 0 ? (
-                <p className="text-xs text-slate-400 bg-[#F6FAF7] p-6 rounded-2xl border border-dashed border-[#D5E6DC] text-center">No addresses saved yet.</p>
+                <p className="text-xs text-slate-400 bg-[#F6FAF7] p-6 rounded-2xl border border-dashed border-[#D5E6DC] text-center">No addresses saved yet. Add a delivery address for fast checkout.</p>
               ) : (
                 <div className="space-y-3">
                   {userAddresses.map(addr => (
@@ -585,17 +703,39 @@ export default function UserDashboard() {
                       <div className="flex items-start gap-3 min-w-0">
                         <MapPin size={16} className="text-[#1E3A2F] shrink-0 mt-0.5" />
                         <div className="min-w-0">
-                          <p className="text-xs font-black text-[#1E3A2F] uppercase">{addr.label}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-xs font-black text-[#1E3A2F] uppercase">{addr.label}</p>
+                            {addr.isDefault && (
+                              <span className="text-[9px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded-md">DEFAULT</span>
+                            )}
+                          </div>
+                          {addr.fullName && <p className="text-xs font-bold text-slate-800 mt-0.5">{addr.fullName} • {addr.phone}</p>}
                           <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{addr.address}</p>
                         </div>
                       </div>
-                      <button 
-                        onClick={() => handleDeleteAddress(addr.id)}
-                        disabled={deletingAddressId === addr.id}
-                        className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors shrink-0"
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => handleEditAddress(addr)}
+                          className="text-xs font-bold text-blue-600 hover:underline px-2 py-1"
+                        >
+                          Edit
+                        </button>
+                        {!addr.isDefault && (
+                          <button
+                            onClick={() => handleSetDefault(addr.id)}
+                            className="text-xs font-bold text-emerald-700 hover:underline px-2 py-1"
+                          >
+                            Set Default
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => handleDeleteAddress(addr.id)}
+                          disabled={deletingAddressId === addr.id}
+                          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -608,32 +748,106 @@ export default function UserDashboard() {
       {/* ── ADDRESS MODAL ── */}
       {showAddressModal && (
         <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-          <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-sm p-8 relative animate-in fade-in duration-200">
-            <button onClick={() => setShowAddressModal(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
-            <h3 className="text-lg font-black text-slate-900 mb-6 flex items-center gap-2"><MapPin className="text-[#1E3A2F]" /> New Delivery Address</h3>
-            <div className="space-y-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 pb-4 border-b border-slate-100 shrink-0 flex justify-between items-center">
+              <h3 className="text-lg font-black text-slate-900 flex items-center gap-2">
+                <MapPin className="text-[#1E3A2F]" size={20} />
+                {editingAddress ? "Edit Address" : "New Delivery Address"}
+              </h3>
+              <button onClick={() => { setShowAddressModal(false); resetAddressForm(); }} className="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100"><X size={20} /></button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-6 space-y-4">
+              {addressFeedback && (
+                <div className={`p-3 rounded-xl text-sm font-medium ${addressFeedback.type === "success" ? "bg-emerald-50 border border-emerald-200 text-emerald-700" : "bg-red-50 border border-red-200 text-red-700"}`}>
+                  {addressFeedback.msg}
+                </div>
+              )}
+
+              {/* Label */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Label</label>
                 <div className="flex gap-2">
                   {["Home", "Work", "Other"].map(l => (
-                    <button key={l} onClick={() => setNewAddress(p => ({ ...p, label: l }))} className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${newAddress.label === l ? "bg-[#E8F3ED] border-[#1E3A2F] text-[#1E3A2F]" : "bg-slate-50 border-slate-100 text-slate-500"}`}>{l}</button>
+                    <button key={l} onClick={() => setAddressForm(p => ({ ...p, label: l }))} className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border ${addressForm.label === l ? "bg-[#E8F3ED] border-[#1E3A2F] text-[#1E3A2F]" : "bg-slate-50 border-slate-100 text-slate-500"}`}>{l}</button>
                   ))}
                 </div>
               </div>
+
+              {/* Full Name */}
               <div>
-                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Full Address</label>
-                <textarea 
-                  value={newAddress.address} 
-                  onChange={e => setNewAddress(p => ({ ...p, address: e.target.value }))}
-                  className="w-full bg-[#F6FAF7] border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] min-h-[100px] resize-none text-slate-900"
-                  placeholder="Street, Landmark, Apartment, City..."
-                />
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Full Name <span className="text-rose-500">*</span></label>
+                <input value={addressForm.fullName} onChange={e => setAddressForm(p => ({ ...p, fullName: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.fullName ? "border-rose-400" : "border-slate-200"}`} placeholder="Recipient full name" />
+                {addressErrors.fullName && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.fullName}</p>}
               </div>
-              <button 
-                onClick={handleAddAddress}
-                className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-xl font-bold text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md"
+
+              {/* Phone */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="10-digit mobile number" maxLength={10} />
+                {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
+              </div>
+
+              {/* House / Flat */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">House / Flat / Building <span className="text-rose-500">*</span></label>
+                <input value={addressForm.houseNumber} onChange={e => setAddressForm(p => ({ ...p, houseNumber: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.houseNumber ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g., B-204, Sunshine Apartments" />
+                {addressErrors.houseNumber && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.houseNumber}</p>}
+              </div>
+
+              {/* Street / Area */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
+                <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g., MG Road, Andheri West" />
+                {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Landmark (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Landmark <span className="text-slate-400">(Optional)</span></label>
+                <input value={addressForm.landmark} onChange={e => setAddressForm(p => ({ ...p, landmark: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="Near Station, Opposite Mall..." />
+              </div>
+
+              {/* City + State */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">City <span className="text-rose-500">*</span></label>
+                  <input value={addressForm.city} onChange={e => setAddressForm(p => ({ ...p, city: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.city ? "border-rose-400" : "border-slate-200"}`} placeholder="Mumbai" />
+                  {addressErrors.city && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.city}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">State <span className="text-rose-500">*</span></label>
+                  <input value={addressForm.state} onChange={e => setAddressForm(p => ({ ...p, state: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.state ? "border-rose-400" : "border-slate-200"}`} placeholder="Maharashtra" />
+                  {addressErrors.state && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.state}</p>}
+                </div>
+              </div>
+
+              {/* PIN Code */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">PIN Code <span className="text-rose-500">*</span></label>
+                <input value={addressForm.pincode} onChange={e => setAddressForm(p => ({ ...p, pincode: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.pincode ? "border-rose-400" : "border-slate-200"}`} placeholder="6-digit PIN code" maxLength={6} />
+                {addressErrors.pincode && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.pincode}</p>}
+              </div>
+
+              {/* Default checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <input type="checkbox" checked={addressForm.isDefault} onChange={e => setAddressForm(p => ({ ...p, isDefault: e.target.checked }))} className="w-4 h-4 rounded border-slate-300 text-[#1E3A2F] focus:ring-[#1E3A2F]" />
+                <span className="text-xs font-bold text-slate-700">Set as default delivery address</span>
+              </label>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 pt-4 border-t border-slate-100 shrink-0">
+              <button
+                onClick={handleSaveAddress}
+                disabled={addressSaving}
+                className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm transition-all active:scale-95 hover:bg-[#152a22] disabled:opacity-60 flex items-center justify-center gap-2"
               >
-                Save Address
+                {addressSaving ? (
+                  <><span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+                ) : editingAddress ? "Update Address" : "Save Address"}
               </button>
             </div>
           </div>
