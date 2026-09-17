@@ -159,8 +159,8 @@ https://medifind.com
 
     # Development / Fallback logger
     print("\n" + "=" * 70)
-    print(f"📧 [MEDIFIND DEV MAILER] Password Reset Requested for: {recipient_email}")
-    print(f"🔗 Secure Reset Link: {reset_url}")
-    print(f"⏱️  Valid for: 20 minutes (Expires: {datetime.now(timezone.utc).isoformat()})")
+    print(f"[MEDIFIND DEV MAILER] Password Reset Requested for: {recipient_email}")
+    print(f"[LINK] Secure Reset Link: {reset_url}")
+    print(f"[TIMER] Valid for: 20 minutes (Expires: {datetime.now(timezone.utc).isoformat()})")
     print("=" * 70 + "\n")
     return True
