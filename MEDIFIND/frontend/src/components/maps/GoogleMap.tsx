@@ -171,10 +171,16 @@ export default function GoogleMap({
           <p className="text-xs text-slate-500 font-medium mb-3">
             {lat.toFixed(4)}° N, {lng.toFixed(4)}° E
           </p>
-          <div className="inline-flex items-center gap-1.5 bg-white/80 border border-emerald-200 px-3 py-1 rounded-full text-[11px] font-semibold text-emerald-800 shadow-sm">
-            <MapPin size={12} className="text-emerald-600" />
-            Google Maps Ready
-          </div>
+          {!isValidApiKey ? (
+            <div className="mt-2 bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-medium px-2.5 py-1 rounded-lg">
+              Set <code>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</code> in <code>frontend/.env</code> to show live map
+            </div>
+          ) : (
+            <div className="inline-flex items-center gap-1.5 bg-white/80 border border-emerald-200 px-3 py-1 rounded-full text-[11px] font-semibold text-emerald-800 shadow-sm mt-2">
+              <MapPin size={12} className="text-emerald-600" />
+              Google Maps Ready
+            </div>
+          )}
           {error && (
             <p className="text-[10px] text-amber-700 mt-2 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
               {error}

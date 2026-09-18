@@ -181,10 +181,19 @@ export default function DirectionsMap({
         </div>
 
         {/* Footer info */}
-        <div className="relative z-10 text-center">
-          <p className="text-[11px] text-slate-500">
-            Live Google Routes API mapping ready for production deployment
-          </p>
+        <div className="relative z-10 text-center px-4">
+          {!isValidApiKey ? (
+            <div className="inline-flex items-center gap-1.5 bg-amber-50/90 border border-amber-200 text-amber-800 text-[11px] font-medium px-3 py-1 rounded-full shadow-sm">
+              <span>⚠️</span>
+              <span>
+                To show live Google Maps, set <strong>NEXT_PUBLIC_GOOGLE_MAPS_API_KEY</strong> in <code>frontend/.env</code>
+              </span>
+            </div>
+          ) : (
+            <p className="text-[11px] text-slate-500">
+              Live Google Routes API mapping active
+            </p>
+          )}
         </div>
       </div>
     );
