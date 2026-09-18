@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
 from database import get_db
 import models, schemas, auth
+import n8n_service
 
 router = APIRouter(prefix="/api/shop", tags=["shop"])
 
@@ -167,6 +168,7 @@ def update_shop_order_status(req: schemas.OrderStatusUpdate, db: Session = Depen
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    previous_status = order.status
     order.status = req.status
     if req.status == "DELIVERED" and order.riderId:
         actual_count = db.query(models.Order).filter(models.Order.riderId == order.riderId, models.Order.status == "DELIVERED").count()
@@ -174,5 +176,28 @@ def update_shop_order_status(req: schemas.OrderStatusUpdate, db: Session = Depen
         if rider:
             rider.completedDeliveries = actual_count
 
+    # Fetch user and pharmacy info for n8n payload
+    order_user = db.query(models.User).filter(models.User.id == order.userId).first()
+    pharmacy = None
+    if order.items and order.items[0].inventory and order.items[0].inventory.pharmacy:
+        pharmacy = order.items[0].inventory.pharmacy
+
     db.commit()
+
+    # ── Fire n8n webhook ───────────────────────────────────────────────
+    rider_obj = db.query(models.User).filter(models.User.id == order.riderId).first() if order.riderId else None
+    n8n_service.emit_order_status_changed(
+        order_id=order.id,
+        tracking_number=order.trackingNumber,
+        previous_status=previous_status,
+        new_status=req.status,
+        user_email=order_user.email if order_user else None,
+        user_name=order_user.name if order_user else None,
+        rider_email=rider_obj.email if rider_obj else None,
+        rider_name=rider_obj.name if rider_obj else None,
+        pharmacy_name=pharmacy.name if pharmacy else None,
+        delivery_address=order.deliveryAddress,
+    )
+    # ─────────────────────────────────────────────────────
+
     return {"success": True, "status": order.status}

@@ -9,6 +9,7 @@ import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List
 import email_service
+import n8n_service
 
 # In-memory rate limiter for password reset requests: key -> list of UTC timestamps
 RESET_RATE_LIMITS: Dict[str, List[datetime]] = {}
@@ -163,6 +164,24 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
 
         db.commit()
         db.refresh(user)
+
+        # Send welcome email via Resend
+        try:
+            email_service.send_welcome_email(recipient_email=email, user_name=req.name, role=role)
+        except Exception as e:
+            print(f"[AUTH_SIGNUP] Welcome email error: {e}")
+
+        # Fire n8n user.registered event
+        try:
+            n8n_service.emit_user_registered(
+                user_id=user.id,
+                email=user.email,
+                name=user.name,
+                role=role,
+            )
+        except Exception as e:
+            print(f"[AUTH_SIGNUP] n8n event error: {e}")
+
         access_token = auth.create_access_token(data={"sub": user.email})
         return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role, "loyaltyPoints": 0}}
     except HTTPException:

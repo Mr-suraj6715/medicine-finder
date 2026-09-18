@@ -4,6 +4,7 @@ from sqlalchemy import or_, and_, desc
 from database import get_db
 import models, schemas, auth
 from utils import generate_cuid, current_iso_time
+import n8n_service
 
 router = APIRouter(prefix="/api/rider", tags=["rider"])
 
@@ -194,7 +195,36 @@ def update_rider_order_status(req: schemas.OrderStatusUpdate, db: Session = Depe
                 actual_count = db.query(models.Order).filter(models.Order.riderId == effective_rider_id, models.Order.status == "DELIVERED").count()
                 rider.completedDeliveries = actual_count + 1
 
+    # Fetch order user info for n8n payload (before commit)
+    order_user = db.query(models.User).filter(models.User.id == order.userId).first()
+
     db.commit()
+
+    # ── Fire n8n webhooks ────────────────────────────────────────────
+    n8n_service.emit_order_status_changed(
+        order_id=order.id,
+        tracking_number=order.trackingNumber,
+        previous_status=previous_status,
+        new_status=req.status,
+        user_email=order_user.email if order_user else None,
+        user_name=order_user.name if order_user else None,
+        rider_email=current_user.email,
+        rider_name=current_user.name,
+        delivery_address=order.deliveryAddress,
+    )
+    if req.status == "DELIVERED":
+        n8n_service.emit_rider_delivered(
+            order_id=order.id,
+            tracking_number=order.trackingNumber,
+            rider_id=effective_rider_id,
+            rider_name=current_user.name,
+            user_email=order_user.email if order_user else None,
+            user_name=order_user.name if order_user else None,
+            total_amount=order.totalAmount,
+            loyalty_earned=order.loyaltyEarned,
+        )
+    # ────────────────────────────────────────────────
+
     return {"success": True, "status": order.status}
 
 @router.put("/orders")
@@ -214,7 +244,28 @@ def accept_rider_order(req: schemas.RiderAcceptOrder, db: Session = Depends(get_
     order.status = "RIDER_ASSIGNED"
     order.driverEarnings = driver_earnings
 
+    # Fetch order user info for n8n payload (before commit)
+    order_user = db.query(models.User).filter(models.User.id == order.userId).first()
+    pharmacy = None
+    if order.items and order.items[0].inventory and order.items[0].inventory.pharmacy:
+        pharmacy = order.items[0].inventory.pharmacy
+
     db.commit()
+
+    # ── Fire n8n rider.assigned event ────────────────────────────
+    n8n_service.emit_rider_assigned(
+        order_id=order.id,
+        tracking_number=order.trackingNumber,
+        rider_id=req.riderId,
+        rider_email=rider.email,
+        rider_name=rider.name,
+        user_email=order_user.email if order_user else None,
+        user_name=order_user.name if order_user else None,
+        pharmacy_name=pharmacy.name if pharmacy else None,
+        delivery_address=order.deliveryAddress,
+    )
+    # ──────────────────────────────────────────────────────
+
     return {"success": True, "status": order.status}
 
 @router.patch("/orders")

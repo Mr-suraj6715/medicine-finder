@@ -5,6 +5,7 @@ from database import get_db
 import models, schemas, auth
 from utils import generate_cuid, current_iso_time
 import uuid
+import n8n_service
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -94,6 +95,7 @@ def create_order(req: schemas.OrderCreate, db: Session = Depends(get_db), curren
     try:
         calculated_total = 0.0
         order_items_to_create = []
+        low_stock_alerts = []  # Track items needing low-stock n8n alerts
         
         for item in req.items:
             # Row lock on the inventory item to prevent race conditions in production
@@ -110,6 +112,16 @@ def create_order(req: schemas.OrderCreate, db: Session = Depends(get_db), curren
             calculated_total += inv.price * item.quantity
             inv.stock -= item.quantity
             inv.sold += item.quantity
+
+            # Track if this item will hit low-stock threshold after deduction
+            if inv.stock <= 5:
+                low_stock_alerts.append({
+                    "inventory_id": inv.id,
+                    "medicine_name": inv.medicine.name if inv.medicine else "Medicine",
+                    "pharmacy_name": inv.pharmacy.name if inv.pharmacy else "Pharmacy",
+                    "pharmacy_id": inv.pharmacyId,
+                    "current_stock": inv.stock,
+                })
             
             order_items_to_create.append(
                 models.OrderItem(
@@ -156,6 +168,38 @@ def create_order(req: schemas.OrderCreate, db: Session = Depends(get_db), curren
             user.loyaltyPoints += req.loyaltyEarned
             
         db.commit()
+
+        # ── Fire n8n webhooks after successful commit ─────────────────────────
+        # Build a simple item summary from request items
+        item_summary = [
+            {
+                "inventoryId": oi_req.inventoryId,
+                "quantity": oi_req.quantity,
+            }
+            for oi_req in req.items
+        ]
+        n8n_service.emit_order_created(
+            order_id=new_order.id,
+            tracking_number=tracking_num,
+            user_email=current_user.email,
+            user_name=current_user.name,
+            total_amount=final_amount,
+            is_emergency=req.isEmergency or False,
+            payment_method=req.paymentMethod or "CASH_ON_DELIVERY",
+            delivery_address=req.deliveryAddress,
+            items=item_summary,
+        )
+        # Fire low-stock alerts for any depleted items
+        for alert in low_stock_alerts:
+            n8n_service.emit_low_stock_alert(
+                inventory_id=alert["inventory_id"],
+                medicine_name=alert["medicine_name"],
+                pharmacy_name=alert["pharmacy_name"],
+                pharmacy_id=alert["pharmacy_id"],
+                current_stock=alert["current_stock"],
+            )
+        # ─────────────────────────────────────────────────────────────────────
+
         return {"success": True, "trackingNumber": tracking_num, "orderId": new_order.id}
     except HTTPException:
         db.rollback()

@@ -131,6 +131,10 @@ https://medifind.com
 </html>
 """
 
+    # Try Resend API if configured
+    if send_resend_email(to=recipient_email, subject="Reset your MediFind password", html=html_content):
+        return True
+
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_user = os.getenv("SMTP_USER")
@@ -164,3 +168,91 @@ https://medifind.com
     print(f"[TIMER] Valid for: 20 minutes (Expires: {datetime.now(timezone.utc).isoformat()})")
     print("=" * 70 + "\n")
     return True
+
+def send_resend_email(to: str, subject: str, html: str) -> bool:
+    """Dispatches transactional email using the official Resend REST API."""
+    import json
+    import urllib.request
+    api_key = os.getenv("RESEND_API_KEY")
+    if not api_key or api_key.strip() == "re_xxxxxxxxx" or not api_key.startswith("re_"):
+        return False
+    from_email = os.getenv("EMAIL_FROM", "MediFind <onboarding@resend.dev>")
+    payload = json.dumps({
+        "from": from_email,
+        "to": [to],
+        "subject": subject,
+        "html": html
+    }).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "User-Agent": "MediFind-App/1.0"
+        }
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            if resp.status in (200, 201):
+                print(f"[EMAIL_SERVICE] Successfully dispatched email via Resend API to {to}")
+                return True
+    except Exception as e:
+        print(f"[EMAIL_SERVICE] Resend API error: {e}")
+    return False
+
+def send_welcome_email(recipient_email: str, user_name: Optional[str] = None, role: Optional[str] = None) -> bool:
+    """Sends a professional welcome email to a newly registered MediFind user."""
+    frontend_url = get_frontend_url()
+    name_display = user_name or "Valued User"
+    role_display = "Medical Shop Owner" if role == "shop_owner" else "Delivery Rider" if role == "rider" else "Customer"
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Welcome to MediFind</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #F8FAF9; color: #1E293B;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #F8FAF9; padding: 40px 15px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" style="max-width: 580px; background: #ffffff; border-radius: 24px; border: 1px solid #E2EFE7; overflow: hidden;" cellspacing="0" cellpadding="0">
+          <tr>
+            <td style="background-color: #1E3A2F; padding: 32px 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 800;">medifind</h1>
+              <p style="color: #A3D1B5; margin: 6px 0 0 0; font-size: 11px; font-weight: 700; text-transform: uppercase;">Healthcare Logistics & Pharmacy Network</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 36px 32px;">
+              <h2 style="font-size: 20px; font-weight: 700; color: #0F172A; margin: 0 0 16px 0;">Welcome to MediFind, {name_display}! 👋</h2>
+              <p style="font-size: 14px; line-height: 1.6; color: #475569; margin: 0 0 20px 0;">
+                Your MediFind account has been successfully created. You are registered as a <strong>{role_display}</strong>.
+              </p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="{frontend_url}" target="_blank" style="background-color: #1E3A2F; color: #ffffff; text-decoration: none; padding: 14px 34px; font-size: 14px; font-weight: 700; border-radius: 9999px; display: inline-block;">
+                  Open MediFind &rarr;
+                </a>
+              </div>
+              <p style="font-size: 12px; color: #64748B;">Need support? Contact our team anytime at support@medifind.com.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background-color: #F8FAF9; padding: 20px 30px; text-align: center; border-top: 1px solid #EEF2F0;">
+              <p style="margin: 0; font-size: 11px; color: #94A3B8;">&copy; {datetime.now().year} MediFind. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+    if send_resend_email(to=recipient_email, subject="Welcome to MediFind", html=html_content):
+        return True
+
+    print(f"\n[MEDIFIND DEV MAILER] Welcome Email simulated for: {recipient_email} ({role_display})\n")
+    return True
+
