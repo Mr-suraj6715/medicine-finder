@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useRef } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { Search } from "lucide-react";
 
 export interface AddressComponents {
@@ -34,15 +34,15 @@ export default function AddressAutocomplete({
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
     if (!apiKey || apiKey === "YOUR_API_KEY_HERE" || !inputRef.current) return;
 
-    const loader = new Loader({
-      apiKey,
-      version: "weekly",
-      libraries: ["places"],
+    setOptions({
+      key: apiKey,
+      v: "weekly",
     });
 
-    loader.load().then(() => {
-      if (!inputRef.current) return;
-      const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
+    importLibrary("places")
+      .then(() => {
+        if (!inputRef.current) return;
+        const autocomplete = new google.maps.places.Autocomplete(inputRef.current, {
         types: ["geocode", "establishment"],
         componentRestrictions: { country: "in" },
       });
