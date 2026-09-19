@@ -1,17 +1,58 @@
 "use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import GoogleMap, { MapMarker } from "@/components/maps/GoogleMap";
-import DirectionsMap from "@/components/maps/DirectionsMap";
+import dynamic from "next/dynamic";
+
+const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then(m => m.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then(m => m.Popup), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
+const UseMapEvents = dynamic(() => import("react-leaflet").then(m => {
+  const { useMap } = m;
+  function FlyTo({ lat, lng, zoom = 16 }: { lat: number; lng: number; zoom?: number }) {
+    const map = useMap();
+    useEffect(() => { 
+      if (lat && lng) map.flyTo([lat, lng], zoom, { animate: true, duration: 1.5 }); 
+    }, [lat, lng, zoom, map]);
+    return null;
+  }
+  return FlyTo;
+}), { ssr: false });
+
+const AutoFitBounds = dynamic(() => import("react-leaflet").then(m => {
+  const { useMap } = m;
+  function Bounds({ p1, p2 }: { p1?: [number, number]; p2?: [number, number] }) {
+    const map = useMap();
+    useEffect(() => {
+      if (p1 && p2 && p1[0] && p1[1] && p2[0] && p2[1]) {
+        try {
+          const bounds: any = [
+            [Math.min(p1[0], p2[0]), Math.min(p1[1], p2[1])],
+            [Math.max(p1[0], p2[0]), Math.max(p1[1], p2[1])],
+          ];
+          map.fitBounds(bounds, { padding: [45, 45], maxZoom: 15 });
+        } catch (err) {
+          console.log("fitBounds error", err);
+        }
+      }
+    }, [p1, p2, map]);
+    return null;
+  }
+  return Bounds;
+}), { ssr: false });
+
+let L: any;
+if (typeof window !== "undefined") L = require("leaflet");
 
 // ─── Pharmacy data with coordinates ───────────────────────────────
 const NEARBY_PHARMACIES = [
-  { name: "Apollo Pharmacy", dist: "0.8 km", open: "Open till 10 PM", price: 15, badge: "Cheapest", lat: 19.0760, lng: 72.8777 },
-  { name: "HealthPlus Medicos", dist: "1.2 km", open: "24/7 Open", price: 18.50, badge: null, lat: 19.1136, lng: 72.8697 },
-  { name: "City Pharma", dist: "0.3 km", open: "Closes in 1 hr", price: 20, badge: null, lat: 19.0454, lng: 72.8415 },
-  { name: "MediStore", dist: "1.5 km", open: "Open till 9 PM", price: 22, badge: null, lat: 19.0822, lng: 72.8840 },
-  { name: "MedLife Pharmacy", dist: "2.1 km", open: "24/7 Open", price: 19, badge: null, lat: 19.0178, lng: 72.8478 },
-  { name: "GenericMeds Hub", dist: "3.5 km", open: "Open till 11 PM", price: 16, badge: null, lat: 19.2183, lng: 72.9781 },
+  { name: "Apollo Pharmacy",    dist: "0.8 km", open: "Open till 10 PM", price: 15,    badge: "Cheapest", lat: 19.0760, lng: 72.8777 },
+  { name: "HealthPlus Medicos", dist: "1.2 km", open: "24/7 Open",       price: 18.50, badge: null,        lat: 19.1136, lng: 72.8697 },
+  { name: "City Pharma",        dist: "0.3 km", open: "Closes in 1 hr",  price: 20,    badge: null,        lat: 19.0454, lng: 72.8415 },
+  { name: "MediStore",          dist: "1.5 km", open: "Open till 9 PM",  price: 22,    badge: null,        lat: 19.0822, lng: 72.8840 },
+  { name: "MedLife Pharmacy",   dist: "2.1 km", open: "24/7 Open",       price: 19,    badge: null,        lat: 19.0178, lng: 72.8478 },
+  { name: "GenericMeds Hub",    dist: "3.5 km", open: "Open till 11 PM", price: 16,    badge: null,        lat: 19.2183, lng: 72.9781 },
 ];
 
 function calculateDistanceKm(lat1?: number | null, lon1?: number | null, lat2?: number | null, lon2?: number | null): number {
@@ -22,9 +63,9 @@ function calculateDistanceKm(lat1?: number | null, lon1?: number | null, lat2?: 
   const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos((lat1 * Math.PI) / 180) *
-    Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) *
-    Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   const dist = R * c;
   return Math.max(0.2, Math.round(dist * 10) / 10);
@@ -51,13 +92,13 @@ import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, get
 
 // ─── Types ────────────────────────────────────────────────────────
 type CartItem = { inventory: any; medicine: any; quantity: number };
-interface PharmacyMarker {
-  name: string;
-  lat: number;
-  lng: number;
-  price?: number;
-  distValue?: number;
-  time?: string;
+interface PharmacyMarker { 
+  name: string; 
+  lat: number; 
+  lng: number; 
+  price?: number; 
+  distValue?: number; 
+  time?: string; 
   dist?: string;
   badge?: string | null;
   rating?: string;
@@ -86,7 +127,7 @@ interface UserAddress {
   isDefault: boolean;
 }
 
-// ─── Google Maps Sub-Component ─────────────────────────────────────
+// ─── LeafletMap Sub-Component ─────────────────────────────────────
 function LeafletMap({
   lat = 19.0760, lng = 72.8777, zoom = 13, title = "Your Location",
   focusLocation,
@@ -106,68 +147,115 @@ function LeafletMap({
   shopLocation?: { lat: number; lng: number; name?: string; address?: string; price?: number } | null;
   showRoute?: boolean;
 }) {
+  const userIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const pharmacyIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const nearestIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [28, 45], iconAnchor: [14, 45], popupAnchor: [1, -34], shadowSize: [45, 45],
+  }) : undefined;
+
+  const nearestPharmacy = [...pharmacies].sort((a, b) => (a.distValue || 999) - (b.distValue || 999))[0];
+
   const mapCenterLat = customerLocation?.lat || userLocation?.lat || lat;
   const mapCenterLng = customerLocation?.lng || userLocation?.lng || lng;
 
-  if (showRoute && customerLocation && shopLocation) {
-    return (
-      <div className="w-full h-full rounded-3xl overflow-hidden relative shadow-inner border border-slate-200">
-        <DirectionsMap
-          origin={{
-            lat: shopLocation.lat,
-            lng: shopLocation.lng,
-            title: shopLocation.name || "Medical Shop",
-            type: "pharmacy",
-          }}
-          destination={{
-            lat: customerLocation.lat,
-            lng: customerLocation.lng,
-            title: customerLocation.title || "Delivery Location",
-            type: "customer",
-          }}
-          className="w-full h-full min-h-[350px]"
-        />
-      </div>
-    );
-  }
-
-  const markers: MapMarker[] = [
-    {
-      lat: mapCenterLat,
-      lng: mapCenterLng,
-      title: customerLocation?.title || title,
-      type: "customer",
-      info: "Delivery Address",
-    },
-    ...pharmacies.map((p) => ({
-      lat: p.lat,
-      lng: p.lng,
-      title: p.name,
-      type: "pharmacy" as const,
-      info: `₹${p.price?.toFixed(0) || "N/A"} • ${p.dist || "Nearby"}`,
-    })),
-  ];
-
-  if (shopLocation) {
-    markers.push({
-      lat: shopLocation.lat,
-      lng: shopLocation.lng,
-      title: shopLocation.name || "Medical Shop",
-      type: "pharmacy",
-      info: shopLocation.address || "Selected Pharmacy",
-    });
-  }
-
   return (
     <div className="w-full h-full rounded-3xl overflow-hidden relative shadow-inner border border-slate-200">
-      <GoogleMap
-        lat={mapCenterLat}
-        lng={mapCenterLng}
-        zoom={zoom}
-        title={title}
-        markers={markers}
-        className="w-full h-full min-h-[350px]"
-      />
+      <MapContainer center={[mapCenterLat, mapCenterLng]} zoom={zoom} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+        <TileLayer 
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+        />
+        
+        {/* Customer / User Marker */}
+        <Marker position={[mapCenterLat, mapCenterLng]} icon={userIcon}>
+          <Popup>
+            <div className="font-bold text-emerald-800">{customerLocation?.title || title}</div>
+            <div className="text-[10px] text-slate-400">Delivery Location</div>
+          </Popup>
+        </Marker>
+
+        {/* Selected Shop Marker for Order Route */}
+        {shopLocation && (
+          <Marker position={[shopLocation.lat, shopLocation.lng]} icon={pharmacyIcon}>
+            <Popup>
+              <div className="p-1">
+                <div className="text-sm font-black text-slate-900">{shopLocation.name || "Medical Shop"}</div>
+                {shopLocation.address && <div className="text-[10px] text-slate-500 mt-0.5">{shopLocation.address}</div>}
+                {shopLocation.price !== undefined && (
+                  <div className="text-[11px] font-black text-emerald-700 mt-1">
+                    ₹{shopLocation.price.toFixed(2)}
+                  </div>
+                )}
+              </div>
+            </Popup>
+          </Marker>
+        )}
+
+        {/* Multiple Pharmacy Markers */}
+        {pharmacies.map((p, i) => {
+          const isNearest = nearestPharmacy && p.name === nearestPharmacy.name;
+          return (
+            <Marker 
+              key={i} 
+              position={[p.lat, p.lng]} 
+              icon={isNearest ? nearestIcon : pharmacyIcon}
+              eventHandlers={{
+                click: () => {
+                  if (onSelectPharmacy) onSelectPharmacy(p);
+                },
+              }}
+            >
+              <Popup>
+                <div className="p-1">
+                  <div className="text-sm font-black text-slate-900">{p.name}</div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">{p.distValue ? `${p.distValue.toFixed(1)} km` : "Nearby"}</span>
+                    {p.price && <span className="text-[10px] font-black text-emerald-700">₹{p.price.toFixed(0)}</span>}
+                  </div>
+                  {isNearest && <div className="text-[10px] font-black text-rose-500 mt-1 uppercase tracking-tighter">★ Fastest Delivery</div>}
+                </div>
+              </Popup>
+            </Marker>
+          );
+        })}
+
+        {/* Direct Route Polyline connecting Customer & Shop */}
+        {showRoute && customerLocation && shopLocation && (
+          <Polyline 
+            positions={[[customerLocation.lat, customerLocation.lng], [shopLocation.lat, shopLocation.lng]]}
+            pathOptions={{ color: '#1E3A2F', weight: 4, opacity: 0.85, dashArray: '8, 8' }} 
+          />
+        )}
+
+        {/* Focus location polyline */}
+        {!showRoute && focusLocation && (
+          <Polyline 
+            positions={[[userLocation?.lat || lat, userLocation?.lng || lng], [focusLocation.lat, focusLocation.lng]]}
+            pathOptions={{ color: '#2D4A3E', weight: 4, opacity: 0.7, dashArray: '10, 10' }} 
+          />
+        )}
+
+        {/* Auto fit bounds when route active */}
+        {showRoute && customerLocation && shopLocation ? (
+          <AutoFitBounds p1={[customerLocation.lat, customerLocation.lng]} p2={[shopLocation.lat, shopLocation.lng]} />
+        ) : focusLocation ? (
+          <UseMapEvents lat={focusLocation.lat} lng={focusLocation.lng} zoom={16} />
+        ) : (
+          <UseMapEvents lat={mapCenterLat} lng={mapCenterLng} zoom={zoom} />
+        )}
+      </MapContainer>
     </div>
   );
 }
@@ -284,10 +372,11 @@ function OrderRouteMapModal({
                       <button
                         key={p.name}
                         onClick={() => onSelectPharmacy(p)}
-                        className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between ${isSelected
-                          ? "border-[#1E3A2F] bg-[#F2F8F4] font-bold shadow-sm"
-                          : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
-                          }`}
+                        className={`w-full text-left p-2.5 rounded-xl border transition-all flex items-center justify-between ${
+                          isSelected
+                            ? "border-[#1E3A2F] bg-[#F2F8F4] font-bold shadow-sm"
+                            : "border-slate-200 hover:border-slate-300 bg-white text-slate-700"
+                        }`}
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-xs truncate">{p.name}</p>
@@ -597,16 +686,16 @@ function LoginModal({
 
 
 // ─── Signup Modal ─────────────────────────────────────────────────
-function SignupModal({
-  onClose,
-  onSuccess,
-  onSwitch,
-  initialRole = "user"
-}: {
-  onClose: () => void;
-  onSuccess: (u: AuthUser, token?: string) => void;
-  onSwitch: (r: "user" | "shop_owner" | "rider") => void;
-  initialRole?: "user" | "shop_owner" | "rider"
+function SignupModal({ 
+  onClose, 
+  onSuccess, 
+  onSwitch, 
+  initialRole = "user" 
+}: { 
+  onClose: () => void; 
+  onSuccess: (u: AuthUser, token?: string) => void; 
+  onSwitch: (r: "user" | "shop_owner" | "rider") => void; 
+  initialRole?: "user" | "shop_owner" | "rider" 
 }) {
   const [form, setForm] = useState({ name: "", email: "", password: "", phone: "", location: "", role: initialRole });
   const [showPw, setShowPw] = useState(false);
@@ -673,7 +762,7 @@ function SignupModal({
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Account Type</label>
             <div className="grid grid-cols-2 gap-3">
               {[
-                { v: "user", label: "Customer", icon: User, desc: "Order medicines" },
+                { v: "user", label: "Customer", icon: User, desc: "Order medicines" }, 
                 { v: "shop_owner", label: "Shop Owner", icon: Store, desc: "Manage your store" },
                 { v: "rider", label: "Rider", icon: Navigation, desc: "Deliver medicines" }
               ].map(opt => (
@@ -734,7 +823,7 @@ export default function Home() {
   const [safetyQuestions, setSafetyQuestions] = useState<any>(null);
   const [escalatedRole, setEscalatedRole] = useState<"pharmacist" | "doctor" | null>(null);
   const [escalationMessage, setEscalationMessage] = useState<string>("");
-  const [pharmacistChat, setPharmacistChat] = useState<{ sender: "user" | "pharmacist", text: string }[]>([]);
+  const [pharmacistChat, setPharmacistChat] = useState<{sender: "user" | "pharmacist", text: string}[]>([]);
   const [pharmacistInput, setPharmacistInput] = useState<string>("");
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
@@ -1062,11 +1151,11 @@ export default function Home() {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       const combined = data.medicines || data.results || [];
-
+      
       setMedicines(combined);
       if (combined.length > 0) setSelectedMedicine(combined[0]);
       else { setSelectedMedicine(null); setInventory([]); }
-    } catch { }
+    } catch {}
     finally { setSearchLoading(false); }
   }, []);
 
@@ -1075,7 +1164,7 @@ export default function Home() {
       const res = await fetch(`/api/inventory/${medicineId}`);
       const data = await res.json();
       setInventory((data.inventory || []).sort((a: any, b: any) => a.price - b.price));
-    } catch { }
+    } catch {}
   }, []);
 
   const fetchLoyalty = useCallback(async () => {
@@ -1084,7 +1173,7 @@ export default function Home() {
       const res = await fetch(`/api/loyalty?email=${user.email}`, { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.loyaltyPoints !== undefined) setLoyaltyPoints(data.loyaltyPoints);
-    } catch { }
+    } catch {}
   }, [user]);
 
   useEffect(() => { handleSearch("Paracetamol"); }, [handleSearch]);
@@ -1114,7 +1203,7 @@ export default function Home() {
     if (!user || cart.length === 0) return;
     const selAddr = userAddresses.find(a => a.id === selectedAddressId);
     if (!selAddr) { alert("Please select a delivery address."); return; }
-
+    
     setIsOrdering(true);
     try {
       const res = await fetch("/api/orders", {
@@ -1130,16 +1219,16 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      if (data.orderId || data.trackingNumber) {
-        setTrackingOrder(data);
+      if (data.orderId || data.trackingNumber) { 
+        setTrackingOrder(data); 
         localStorage.setItem("medifind_active_order_id", data.orderId || data.trackingNumber);
-        setShowOrderSuccess(true);
-        setCart([]);
-        setIsCartOpen(false);
-        setIsEmergencyMode(false);
-        fetchLoyalty();
+        setShowOrderSuccess(true); 
+        setCart([]); 
+        setIsCartOpen(false); 
+        setIsEmergencyMode(false); 
+        fetchLoyalty(); 
       }
-    } catch { } finally { setIsOrdering(false); }
+    } catch {} finally { setIsOrdering(false); }
   };
 
   const handleSymptomCheck = async (overrideSafetyInfo?: any) => {
@@ -1232,7 +1321,7 @@ export default function Home() {
               setTrackingOrder(activeOrder);
             }
           }
-        } catch { }
+        } catch {}
       }
     };
 
@@ -1323,7 +1412,7 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900 selection:bg-[#2D4A3E]/20">
-
+      
       {/* ── TOP TICKER ANNOUNCEMENT BAR (Hers Style) ── */}
       <div className="bg-[#F0F6F2] border-b border-[#E2EFE7] text-[#2D4A3E] text-xs font-semibold py-2 px-4 overflow-x-auto whitespace-nowrap scrollbar-none">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-8 text-[11px] font-medium tracking-tight">
@@ -1362,21 +1451,22 @@ export default function Home() {
             </div>
 
             <div className="flex-1 max-w-xl h-2 bg-slate-100 rounded-full relative overflow-hidden hidden sm:block">
-              <div
+              <div 
                 className={`absolute top-0 left-0 h-full transition-all duration-1000 ease-out ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}
                 style={{
-                  width: `${trackingOrder.status === "PENDING" ? "15%" :
+                  width: `${
+                    trackingOrder.status === "PENDING" ? "15%" :
                     trackingOrder.status === "PROCESSING" ? "30%" :
-                      trackingOrder.status === "CONFIRMED" ? "45%" :
-                        trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
-                          trackingOrder.status === "RIDER_AT_PHARMACY" ? "75%" :
-                            trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" : "0%"
-                    }`
+                    trackingOrder.status === "CONFIRMED" ? "45%" :
+                    trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
+                    trackingOrder.status === "RIDER_AT_PHARMACY" ? "75%" :
+                    trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" : "0%"
+                  }`
                 }}
               />
             </div>
 
-            <button
+            <button 
               onClick={() => setIsTrackingMode(true)}
               className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all active:scale-95 flex items-center gap-2"
             >
@@ -1387,29 +1477,29 @@ export default function Home() {
       )}
 
       {showLogin && (
-        <LoginModal
+        <LoginModal 
           initialRole={authModalRole}
           initialEmail={authModalEmail}
-          onClose={() => setShowLogin(false)}
+          onClose={() => setShowLogin(false)} 
           onSuccess={handleAuthSuccess}
-          onSwitch={(r) => {
+          onSwitch={(r) => { 
             setAuthModalRole(r);
-            setShowLogin(false);
-            setShowSignup(true);
-          }}
+            setShowLogin(false); 
+            setShowSignup(true); 
+          }} 
         />
       )}
-
+      
       {showSignup && (
-        <SignupModal
+        <SignupModal 
           initialRole={authModalRole}
-          onClose={() => setShowSignup(false)}
-          onSuccess={handleAuthSuccess}
-          onSwitch={(r) => {
+          onClose={() => setShowSignup(false)} 
+          onSuccess={handleAuthSuccess} 
+          onSwitch={(r) => { 
             setAuthModalRole(r);
-            setShowSignup(false);
-            setShowLogin(true);
-          }}
+            setShowSignup(false); 
+            setShowLogin(true); 
+          }} 
         />
       )}
 
@@ -1449,7 +1539,7 @@ export default function Home() {
       <nav className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100">
         <div className="max-w-7xl mx-auto px-6 sm:px-10">
           <div className="flex justify-between items-center h-20">
-
+            
             {/* Logo */}
             <a href="/" className="flex items-center gap-2">
               <span className="text-3xl font-serif tracking-tighter text-[#1E3A2F] font-bold">medifind</span>
@@ -1467,7 +1557,7 @@ export default function Home() {
             <div className="flex items-center gap-4">
               {user ? (
                 <div className="relative">
-                  <button
+                  <button 
                     onClick={() => setProfileOpen(!profileOpen)}
                     className="flex items-center gap-2 bg-[#F0F6F2] hover:bg-[#E2EFE7] px-5 py-2.5 rounded-full text-xs font-bold text-[#1E3A2F] border border-[#D5E6DC] transition-all"
                   >
@@ -1491,14 +1581,14 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="flex items-center gap-2 sm:gap-3">
-                  <button
-                    onClick={() => { setAuthModalRole("user"); setShowLogin(true); }}
+                  <button 
+                    onClick={() => { setAuthModalRole("user"); setShowLogin(true); }} 
                     className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-4 sm:px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
                   >
                     Account
                   </button>
-                  <button
-                    onClick={() => { setAuthModalRole("shop_owner"); setShowLogin(true); }}
+                  <button 
+                    onClick={() => { setAuthModalRole("shop_owner"); setShowLogin(true); }} 
                     className="hidden sm:flex items-center gap-1.5 bg-[#1E3A2F] text-white hover:bg-[#152a22] px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm"
                   >
                     <Store size={13} /> Pharmacy Partner
@@ -1507,8 +1597,8 @@ export default function Home() {
               )}
 
               {/* Cart Button */}
-              <button
-                onClick={() => setIsCartOpen(true)}
+              <button 
+                onClick={() => setIsCartOpen(true)} 
                 className="relative p-2.5 text-slate-700 hover:bg-slate-100 rounded-full transition-colors"
               >
                 <ShoppingCart size={22} />
@@ -1688,8 +1778,9 @@ export default function Home() {
                   return (
                     <div
                       key={`${p.name}-${idx}`}
-                      className={`rounded-2xl p-5 border-2 transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${isBestPrice ? "border-emerald-300 bg-[#F9FCFA]" : "border-slate-100 bg-white hover:border-[#1E3A2F]/20"
-                        }`}
+                      className={`rounded-2xl p-5 border-2 transition-all duration-300 hover:shadow-xl flex flex-col justify-between ${
+                        isBestPrice ? "border-emerald-300 bg-[#F9FCFA]" : "border-slate-100 bg-white hover:border-[#1E3A2F]/20"
+                      }`}
                     >
                       <div>
                         <div className="flex justify-between items-start mb-3">
@@ -1794,7 +1885,7 @@ export default function Home() {
                 {medicines.slice(0, visibleMedicineCount).map(med => {
                   const bestInv = med.inventory?.sort((a: any, b: any) => a.price - b.price)[0];
                   return (
-                    <div key={med.id}
+                    <div key={med.id} 
                       onClick={() => { setSelectedMedicine(med); fetchInventory(med.id); }}
                       className={`group cursor-pointer p-6 rounded-[32px] border-2 transition-all duration-300 hover:shadow-2xl hover:-translate-y-1.5 flex flex-col ${selectedMedicine?.id === med.id ? "border-[#1E3A2F] bg-[#F2F8F4] shadow-xl" : "border-slate-100 bg-white hover:border-[#1E3A2F]/30"}`}>
                       <div className="flex items-center gap-4 mb-5">
@@ -1809,7 +1900,7 @@ export default function Home() {
                           </div>
                         </div>
                       </div>
-
+                      
                       <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Starting From</p>
@@ -1871,7 +1962,7 @@ export default function Home() {
         {/* ── AI HEALTH ASSISTANT ── */}
         <div id="ai" className="bg-[#1D352C] rounded-[36px] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl border border-emerald-900/30">
           <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
-
+          
           <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
             {/* Left Side: Input & Safety Questions */}
             <div className="lg:col-span-5 space-y-6">
@@ -1905,7 +1996,7 @@ export default function Home() {
                     <ShieldCheck size={14} /> Medical Safety Check
                   </h4>
                   <p className="text-slate-300 text-[11px]">To safely check OTC guidance, we require the following info:</p>
-
+                  
                   {safetyQuestions.age && (
                     <div className="space-y-1">
                       <label className="text-[10px] text-slate-400 font-bold">{safetyQuestions.age}</label>
@@ -1993,7 +2084,7 @@ export default function Home() {
 
             {/* Right Side: Response Feed, Escalation Chat, Booking Calendar */}
             <div className="lg:col-span-7 bg-[#14261F] border border-emerald-800/20 rounded-[28px] p-6 min-h-[350px] flex flex-col">
-
+              
               {/* Case 1: Simulated Chat with Pharmacist */}
               {escalatedRole === "pharmacist" && (
                 <div className="flex-1 flex flex-col h-full animate-in fade-in duration-300">
@@ -2088,7 +2179,7 @@ export default function Home() {
                 <div className="flex-1 flex flex-col justify-between">
                   {aiConsultResult ? (
                     <div className="space-y-4">
-
+                      
                       {/* Sub-case 3a: RED FLAG detected */}
                       {aiConsultResult.status === "RED_FLAG" && (
                         <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-5 space-y-3 animate-in fade-in duration-500">
@@ -2129,7 +2220,7 @@ export default function Home() {
                       {/* Sub-case 3d: OK - MATCH SUCCESS */}
                       {aiConsultResult.status === "OK" && (
                         <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar animate-in fade-in duration-500">
-
+                          
                           {/* Match Header / Condition Advice */}
                           {aiConsultResult.conditions.map((c: any) => (
                             <div key={c.conditionKey} className="bg-white/5 border border-emerald-800/20 rounded-2xl p-4 space-y-2">
@@ -2158,7 +2249,7 @@ export default function Home() {
                                       <span className="bg-emerald-950 text-emerald-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">OTC</span>
                                     </div>
                                     <p className="text-[10px] text-slate-400">{p.generalUse}</p>
-
+                                    
                                     {/* Pharmacy details dropdown/label */}
                                     <div className="flex flex-wrap items-center gap-2 mt-1">
                                       <span className="text-[9px] font-black text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded">In Stock</span>
@@ -2378,14 +2469,14 @@ export default function Home() {
                   <div className="space-y-2">
                     <div className="flex justify-between items-center px-1">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Delivery Address</p>
-                      <button onClick={() => {
+                      <button onClick={() => { 
                         if (!user || !getAuthToken()) {
                           setIsCartOpen(false);
                           setShowLogin(true);
                           return;
                         }
-                        resetAddressForm();
-                        setShowAddressModal(true);
+                        resetAddressForm(); 
+                        setShowAddressModal(true); 
                       }} className="text-[10px] text-[#1E3A2F] font-bold hover:underline">+ Add New</button>
                     </div>
                     {userAddresses.length === 0 ? (
@@ -2492,7 +2583,7 @@ export default function Home() {
               Your order has been placed successfully. You can track delivery progress in real time.
             </p>
             <div className="flex flex-col gap-4">
-              <button
+              <button 
                 onClick={() => {
                   setIsTrackingMode(true);
                   setShowOrderSuccess(false);
@@ -2501,7 +2592,7 @@ export default function Home() {
               >
                 Track Your Package
               </button>
-              <button
+              <button 
                 onClick={() => {
                   if (user?.role === "shop_owner") window.location.href = "/dashboard/shop";
                   else window.location.href = "/dashboard/user";
@@ -2533,17 +2624,18 @@ export default function Home() {
             <div className="p-8">
               <div className="mb-12 relative px-4">
                 <div className="absolute top-4 left-4 right-4 h-1 bg-slate-100 rounded-full"></div>
-                <div
+                <div 
                   className={`absolute top-4 left-4 h-1 rounded-full transition-all duration-1000 ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}
-                  style={{
-                    width: `${trackingOrder.status === "PENDING" ? "5%" :
+                  style={{ 
+                    width: `${
+                      trackingOrder.status === "PENDING" ? "5%" :
                       trackingOrder.status === "PROCESSING" ? "20%" :
-                        trackingOrder.status === "CONFIRMED" ? "40%" :
-                          trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
-                            trackingOrder.status === "RIDER_AT_PHARMACY" ? "80%" :
-                              trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" :
-                                trackingOrder.status === "DELIVERED" ? "100%" : "0%"
-                      }`
+                      trackingOrder.status === "CONFIRMED" ? "40%" :
+                      trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
+                      trackingOrder.status === "RIDER_AT_PHARMACY" ? "80%" :
+                      trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" :
+                      trackingOrder.status === "DELIVERED" ? "100%" : "0%"
+                    }` 
                   }}
                 ></div>
                 <div className="flex justify-between relative mt-1">

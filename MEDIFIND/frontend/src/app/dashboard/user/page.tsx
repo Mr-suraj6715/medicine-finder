@@ -7,7 +7,12 @@ import {
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
 
-import GoogleMap from "@/components/maps/GoogleMap";
+import dynamic from "next/dynamic";
+
+const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then(m => m.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then(m => m.Popup), { ssr: false });
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-800 border-amber-200",
@@ -18,6 +23,28 @@ const STATUS_COLORS: Record<string, string> = {
   OUT_FOR_DELIVERY: "bg-purple-50 text-purple-800 border-purple-200",
   DELIVERED: "bg-[#E8F3ED] text-[#1E3A2F] border-[#CDE3D5]",
 };
+
+function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title: string; zoom: number }) {
+  const [icon, setIcon] = useState<any>(null);
+  useEffect(() => {
+    import("leaflet").then(L => {
+      setIcon(L.icon({
+        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+        iconSize: [25, 41], iconAnchor: [12, 41],
+      }));
+    });
+  }, []);
+  if (!icon) return <div className="w-full h-full bg-[#EBF4EE] animate-pulse rounded-2xl" />;
+  return (
+    <div className="w-full h-full rounded-2xl overflow-hidden">
+      <MapContainer center={[lat, lng]} zoom={zoom} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
+        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <Marker position={[lat, lng]} icon={icon}><Popup>{title}</Popup></Marker>
+      </MapContainer>
+    </div>
+  );
+}
 
 // ── Order Details Modal ────────────────────────────────────────────
 function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void }) {

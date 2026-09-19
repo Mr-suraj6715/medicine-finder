@@ -24,12 +24,22 @@ body {
 /* Smooth scroll */
 html { scroll-behavior: smooth; }
 
-/* Google Maps styling */
-.gm-style-iw {
-  border-radius: 16px !important;
-  padding: 8px !important;
+/* Leaflet z-index fix */
+.leaflet-pane,
+.leaflet-tile,
+.leaflet-marker-icon,
+.leaflet-marker-shadow,
+.leaflet-tile-container,
+.leaflet-pane > svg,
+.leaflet-pane > canvas,
+.leaflet-zoom-box,
+.leaflet-image-layer,
+.leaflet-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
 }
-.gm-style-iw-d {
-  overflow: hidden !important;
+.leaflet-container {
+  overflow: hidden;
+  background: #dde;
 }
-

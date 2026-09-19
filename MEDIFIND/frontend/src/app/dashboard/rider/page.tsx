@@ -5,7 +5,13 @@ import {
   Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
-import DirectionsMap from "@/components/maps/DirectionsMap";
+import dynamic from "next/dynamic";
+
+const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
+const TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
+const Marker = dynamic(() => import("react-leaflet").then(m => m.Marker), { ssr: false });
+const Popup = dynamic(() => import("react-leaflet").then(m => m.Popup), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
 
 type AuthUser = { id: string; email: string; name: string; role: string; phone?: string; address?: string; vehicleType?: string };
 
@@ -24,24 +30,50 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: any; rider: any }) {
-  const origin = rider || pharmacy;
+  let L: any;
+  if (typeof window !== "undefined") L = require("leaflet");
+
+  const shopIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const customerIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const riderIcon = typeof window !== "undefined" ? L?.icon({
+    iconUrl: "https://cdn-icons-png.flaticon.com/512/2972/2972185.png",
+    iconSize: [35, 35], iconAnchor: [17, 35], popupAnchor: [0, -35]
+  }) : undefined;
+
+  const centerLat = (pharmacy.lat + customer.lat) / 2;
+  const centerLng = (pharmacy.lng + customer.lng) / 2;
+
   return (
     <div className="w-full h-full rounded-[28px] overflow-hidden shadow-inner border border-[#E2EFE7]">
-      <DirectionsMap
-        origin={{
-          lat: origin.lat,
-          lng: origin.lng,
-          title: rider ? "Your Location" : (pharmacy.name || "Pharmacy"),
-          type: rider ? "rider" : "pharmacy",
-        }}
-        destination={{
-          lat: customer.lat,
-          lng: customer.lng,
-          title: customer.address || "Customer Destination",
-          type: "customer",
-        }}
-        className="w-full h-full min-h-[300px]"
-      />
+      <MapContainer center={[centerLat, centerLng]} zoom={14} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+        <TileLayer 
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+        />
+        <Marker position={[pharmacy.lat, pharmacy.lng]} icon={shopIcon}><Popup>Pharmacy</Popup></Marker>
+        <Marker position={[customer.lat, customer.lng]} icon={customerIcon}><Popup>Customer Destination</Popup></Marker>
+        {rider && <Marker position={[rider.lat, rider.lng]} icon={riderIcon}><Popup>Your Location</Popup></Marker>}
+        <Polyline 
+          positions={[[pharmacy.lat, pharmacy.lng], [customer.lat, customer.lng]]}
+          pathOptions={{ color: '#1E3A2F', weight: 4, opacity: 0.7, dashArray: '8, 8' }} 
+        />
+        {rider && (
+          <Polyline 
+            positions={[[rider.lat, rider.lng], [customer.lat, customer.lng]]}
+            pathOptions={{ color: '#059669', weight: 4, opacity: 0.8 }} 
+          />
+        )}
+      </MapContainer>
     </div>
   );
 }
