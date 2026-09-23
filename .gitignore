@@ -43,3 +43,4 @@ frontend/prisma/dev.db-journal
 .DS_Store
 Thumbs.db
 *.tsbuildinfo
+scratch/

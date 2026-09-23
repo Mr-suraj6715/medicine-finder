@@ -261,9 +261,12 @@ export default function UserDashboard() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
-      errs.phone = "Enter a valid 10-digit Indian mobile number";
+      errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
     if (!addressForm.houseNumber.trim()) {
       errs.houseNumber = "House / Flat / Building is required";
@@ -307,7 +310,19 @@ export default function UserDashboard() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const parts = [
+        addressForm.houseNumber.trim(),
+        addressForm.street.trim(),
+        addressForm.landmark ? addressForm.landmark.trim() : null,
+        addressForm.city.trim(),
+        addressForm.state.trim(),
+        addressForm.pincode.trim()
+      ].filter(Boolean);
+      const combined = parts.join(", ");
       const payload: any = {
         ...addressForm,
         fullName: addressForm.fullName.trim(),
@@ -318,6 +333,8 @@ export default function UserDashboard() {
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
         pincode: addressForm.pincode.trim(),
+        address: combined,
+        deliveryAddress: combined,
       };
       if (!isEditing) payload.userId = user.id;
       const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
@@ -332,7 +349,15 @@ export default function UserDashboard() {
           }, 1200);
           return;
         }
-        const errMsg = typeof data.detail === "string" ? data.detail : "Failed to save address";
+        const errMsg = typeof data.detail === "string"
+          ? data.detail
+          : Array.isArray(data.detail)
+            ? data.detail.map((d: any) => {
+                const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : "";
+                const msg = (d.msg || "").replace(/^Value error,\s*/i, "");
+                return field && field !== "body" ? `${field}: ${msg}` : msg;
+              }).join(". ")
+            : "Failed to save address";
         setAddressFeedback({ type: "error", msg: errMsg });
         return;
       }
@@ -809,7 +834,7 @@ export default function UserDashboard() {
               {/* Phone */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
-                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="10-digit mobile number" maxLength={10} />
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g. +91 98200 11221 or 9820011221" maxLength={16} />
                 {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
               </div>
 

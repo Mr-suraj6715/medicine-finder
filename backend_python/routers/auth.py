@@ -9,6 +9,7 @@ import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List
 import email_service
+import n8n_service
 
 # In-memory rate limiter for password reset requests: key -> list of UTC timestamps
 RESET_RATE_LIMITS: Dict[str, List[datetime]] = {}
@@ -45,7 +46,7 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_access_token(data={"sub": user.email, "id": user.id, "role": user.role})
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "Demo Customer", "role": "user", "loyaltyPoints": user.loyaltyPoints or 0}}
         
         if email == "shop@medstore.com":
@@ -78,7 +79,7 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(pharmacy)
                 db.commit()
 
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_access_token(data={"sub": user.email, "id": user.id, "role": user.role})
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "MediStore Pharmacy", "role": "shop_owner", "loyaltyPoints": user.loyaltyPoints or 0}}
         
         if email == "rider@medstore.com":
@@ -92,7 +93,7 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_access_token(data={"sub": user.email, "id": user.id, "role": user.role})
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "Rider Partner", "role": "rider", "loyaltyPoints": user.loyaltyPoints or 0}}
 
         if not user:
@@ -113,7 +114,7 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 detail=f"This account is registered as a {target_role}. Please switch to the {target_role} tab to log in."
             )
             
-        access_token = auth.create_access_token(data={"sub": user.email})
+        access_token = auth.create_access_token(data={"sub": user.email, "id": user.id, "role": user.role})
         return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role, "loyaltyPoints": user.loyaltyPoints or 0}}
     except HTTPException:
         raise
@@ -163,7 +164,25 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
 
         db.commit()
         db.refresh(user)
-        access_token = auth.create_access_token(data={"sub": user.email})
+
+        # Send welcome email via Resend
+        try:
+            email_service.send_welcome_email(recipient_email=email, user_name=req.name, role=role)
+        except Exception as e:
+            print(f"[AUTH_SIGNUP] Welcome email error: {e}")
+
+        # Fire n8n user.registered event
+        try:
+            n8n_service.emit_user_registered(
+                user_id=user.id,
+                email=user.email,
+                name=user.name,
+                role=role,
+            )
+        except Exception as e:
+            print(f"[AUTH_SIGNUP] n8n event error: {e}")
+
+        access_token = auth.create_access_token(data={"sub": user.email, "id": user.id, "role": user.role})
         return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role, "loyaltyPoints": 0}}
     except HTTPException:
         raise

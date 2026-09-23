@@ -80,8 +80,19 @@ model User {
   orders         Order[]    @relation("UserOrders")
   riderOrders    Order[]    @relation("RiderOrders")
   healthLogs     HealthLog[]
+  passwordResetTokens PasswordResetToken[]
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt String
+  isUsed    Boolean  @default(false)
+  createdAt String
+  user      User     @relation(fields: [userId], references: [id])
 }
 
 model Address {

@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc
@@ -176,13 +177,13 @@ def is_prescription_med(name: str) -> bool:
 
 
 @router.post("/api/ai-consultant")
-def ai_consultant(req: schemas.AIConsultantRequest, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def ai_consultant(req: schemas.AIConsultantRequest, db: Session = Depends(get_db), current_user: Optional[models.User] = Depends(auth.get_optional_current_user)):
     symptoms_text = req.symptoms.strip()
     safety_info = req.safetyInfo or {}
     age = safety_info.get("age")
     allergies = safety_info.get("allergies", "")
     pregnancy = bool(safety_info.get("pregnancy", False))
-    user_email = current_user.email
+    user_email = current_user.email if current_user else req.userEmail
 
     # 1. Red-flag detection
     red_flags = detect_red_flags(symptoms_text)

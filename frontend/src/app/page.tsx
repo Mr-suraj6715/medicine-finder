@@ -958,9 +958,12 @@ export default function Home() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
-      errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221)";
+      errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
     if (!addressForm.houseNumber.trim()) {
       errs.houseNumber = "House / Flat / Building is required";
@@ -1008,7 +1011,19 @@ export default function Home() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const parts = [
+        addressForm.houseNumber.trim(),
+        addressForm.street.trim(),
+        addressForm.landmark ? addressForm.landmark.trim() : null,
+        addressForm.city.trim(),
+        addressForm.state.trim(),
+        addressForm.pincode.trim()
+      ].filter(Boolean);
+      const combined = parts.join(", ");
       const payload: any = {
         ...addressForm,
         fullName: addressForm.fullName.trim(),
@@ -1019,6 +1034,8 @@ export default function Home() {
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
         pincode: addressForm.pincode.trim(),
+        address: combined,
+        deliveryAddress: combined,
         latitude: userLocation?.lat || null,
         longitude: userLocation?.lng || null
       };
@@ -1215,7 +1232,7 @@ export default function Home() {
           items: cart.map(i => ({ inventoryId: i.inventory.id, quantity: i.quantity, priceAtTime: i.inventory.price })),
           isEmergency: isEmergencyMode,
           paymentMethod,
-          deliveryAddress: selAddr?.address || "",
+          deliveryAddress: selAddr?.address || [selAddr?.houseNumber, selAddr?.street, selAddr?.landmark, selAddr?.city, selAddr?.pincode].filter(Boolean).join(", ") || user?.address || "Mumbai, Maharashtra",
         }),
       });
       const data = await res.json();
@@ -1252,7 +1269,7 @@ export default function Home() {
     try {
       const res = await fetch("/api/ai-consultant", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           userEmail: user?.email || "user@example.com",
           symptoms: userSymptoms,
@@ -2732,6 +2749,27 @@ export default function Home() {
             <a href="/?auth=login&role=shop_owner" onClick={(e) => { e.preventDefault(); setAuthModalRole("shop_owner"); setShowLogin(true); }} className="hover:text-white transition-colors">Pharmacy Partners</a>
             <a href="#" className="hover:text-white transition-colors">Contact Support</a>
           </div>
+
+          {/* ── FOOTER BOTTOM ATTRIBUTION ── */}
+          <div className="mt-10 pt-8 border-t border-emerald-800/60 flex flex-col items-center justify-center gap-3 text-center">
+            <div className="inline-flex items-center gap-2.5 bg-[#152a22] hover:bg-[#0f1f19] border border-emerald-700/50 hover:border-cyan-500/50 px-5 py-2.5 rounded-full transition-all duration-300 shadow-md group">
+              <span className="text-slate-300 text-xs font-medium">Made by</span>
+              <img
+                src="/darvyx-logo.png"
+                alt="Darvyx"
+                className="w-5 h-5 object-contain rounded transition-transform duration-300 group-hover:scale-110 drop-shadow-[0_0_6px_rgba(56,189,248,0.4)]"
+              />
+              <span className="font-bold text-white text-xs tracking-wide group-hover:text-cyan-400 transition-colors">
+                Darvyx
+              </span>
+              <span className="text-emerald-300/70 text-xs font-normal border-l border-emerald-800/80 pl-2.5">
+                A Digital Agency
+              </span>
+            </div>
+            <p className="text-xs text-emerald-200/60 font-medium">
+              &copy; {new Date().getFullYear()} MediFind. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
 
@@ -2774,7 +2812,7 @@ export default function Home() {
               {/* Phone */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
-                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? 'border-rose-400' : 'border-slate-200'}`} placeholder="10-digit mobile number" maxLength={10} />
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? 'border-rose-400' : 'border-slate-200'}`} placeholder="e.g. +91 98200 11221 or 9820011221" maxLength={16} />
                 {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
               </div>
 
