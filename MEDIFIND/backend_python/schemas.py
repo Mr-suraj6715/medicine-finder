@@ -43,7 +43,7 @@ class SignupRequest(BaseModel):
         raise ValueError("Invalid role specified. Allowed roles: Customer, Shop Owner, Rider")
 
 class AddressCreate(BaseModel):
-    userId: str = Field(..., max_length=128)
+    userId: Optional[str] = Field(None, max_length=128)
     label: str = Field("Home", max_length=50)
     fullName: str = Field(..., min_length=2, max_length=100)
     phone: str = Field(..., min_length=10, max_length=25)
@@ -88,9 +88,6 @@ class AddressCreate(BaseModel):
         cleaned = str(v).strip()
         if len(cleaned) < 2:
             raise ValueError("Full Name is too short (min 2 characters)")
-        # Allow normal English letters, spaces, numbers, dots, hyphens, apostrophes, commas
-        if not re.match(r"^[A-Za-z0-9\s\.\-\',#&/()]+$", cleaned):
-            raise ValueError("Full Name contains invalid characters")
         return cleaned
 
     @validator("houseNumber", "street", "city", "state", pre=True)
@@ -100,9 +97,6 @@ class AddressCreate(BaseModel):
         cleaned = str(v).strip()
         if len(cleaned) < 1:
             raise ValueError("Field cannot be empty")
-        # Allow normal English address characters: letters, numbers, spaces, punctuation
-        if not re.match(r"^[A-Za-z0-9\s\.\-\',#&/()]+$", cleaned):
-            raise ValueError("Field contains invalid characters")
         return cleaned
 
     @validator("area", "landmark", pre=True)
@@ -112,8 +106,6 @@ class AddressCreate(BaseModel):
         cleaned = str(v).strip()
         if not cleaned:
             return None
-        if not re.match(r"^[A-Za-z0-9\s\.\-\',#&/()]+$", cleaned):
-            raise ValueError("Field contains invalid characters")
         return cleaned
 
 
@@ -161,8 +153,6 @@ class AddressUpdate(BaseModel):
         cleaned = str(v).strip()
         if not cleaned:
             return None
-        if not re.match(r"^[A-Za-z0-9\s\.\-\',#&/()]+$", cleaned):
-            raise ValueError("Field contains invalid characters")
         return cleaned
 
 class RiderProfileUpdate(BaseModel):

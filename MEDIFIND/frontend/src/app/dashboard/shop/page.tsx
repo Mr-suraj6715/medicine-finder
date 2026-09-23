@@ -165,6 +165,8 @@ export default function ShopDashboard() {
     } catch (e) { console.error(e); }
   }, []);
 
+  const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
+
   useEffect(() => {
     const u = getStoredUser();
 
@@ -174,7 +176,8 @@ export default function ShopDashboard() {
     }
 
     if (u.role !== "shop_owner") {
-      window.location.replace(getDashboardUrl(u.role));
+      setRoleMismatchUser(u as any);
+      setAuthLoading(false);
       return;
     }
 
@@ -864,6 +867,41 @@ export default function ShopDashboard() {
   const pendingOrders = orders.filter(o => o.status === "PENDING").length;
   const totalItems = inventory.reduce((a, m) => a + (m.stock || 0), 0);
   const lowStock = inventory.filter(m => m.stock < 20).length;
+
+  if (roleMismatchUser) {
+    return (
+      <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200">
+            <Store size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Shop Owner Account Required</h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong>{roleMismatchUser.email}</strong> ({roleMismatchUser.role === "user" ? "Customer" : "Delivery Rider"}). To access the Medical Shop Owner Dashboard, please sign in with your Medical Shop Owner account.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                clearAuthSession();
+                window.location.replace("/?auth=login&role=shop_owner");
+              }}
+              className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+            >
+              Sign In as Medical Shop Owner
+            </button>
+            <button
+              onClick={() => {
+                window.location.replace(getDashboardUrl(roleMismatchUser.role));
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+            >
+              Return to {roleMismatchUser.role === "user" ? "Customer Portal" : "Rider Portal"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (authLoading || !user) return (
     <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">

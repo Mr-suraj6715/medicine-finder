@@ -1122,6 +1122,19 @@ export default function Home() {
 
     const storedUser = getStoredUser();
     if (storedUser) {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const reqRole = params.get("role");
+        if (params.get("auth") === "login" && reqRole && reqRole !== storedUser.role) {
+          clearAuthSession();
+          setUser(null);
+          setAuthModalRole(reqRole as any);
+          setShowLogin(true);
+          setShowSignup(false);
+          setIsAuthChecking(false);
+          return;
+        }
+      }
       setUser(storedUser);
       if (storedUser.role === "shop_owner") {
         window.location.replace("/dashboard/shop");
@@ -1574,11 +1587,23 @@ export default function Home() {
                   {profileOpen && (
                     <>
                       <div className="fixed inset-0 z-[40]" onClick={() => setProfileOpen(false)}></div>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-52 z-[50] animate-in fade-in zoom-in-95 duration-200">
-                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-slate-700 font-bold">
-                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} Dashboard
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-60 z-[50] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-4 py-2 border-b border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Signed in as</p>
+                          <p className="text-xs font-bold text-slate-800 truncate">{user.email}</p>
+                          <span className="inline-block mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#E8F3ED] text-[#1E3A2F]">
+                            {user.role === "shop_owner" ? "Medical Shop Owner" : user.role === "rider" ? "Delivery Rider" : "Customer"}
+                          </span>
+                        </div>
+                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 font-bold">
+                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} My Dashboard
                         </a>
-                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-rose-600 w-full text-left font-bold">
+                        {user.role !== "shop_owner" && (
+                          <a href="/dashboard/shop" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-emerald-50 text-[#1E3A2F] font-bold">
+                            <Store size={15} /> Shop Owner Portal
+                          </a>
+                        )}
+                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-rose-50 text-rose-600 w-full text-left font-bold border-t border-slate-100 mt-1">
                           <LogOut size={15} /> Sign out
                         </button>
                       </div>

@@ -24,6 +24,28 @@ const STATUS_COLORS: Record<string, string> = {
   DELIVERED: "bg-[#E8F3ED] text-[#1E3A2F] border-[#CDE3D5]",
 };
 
+function formatApiError(detail: any, fallback: string = "Request failed"): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: any) => {
+        if (typeof item === "string") return item;
+        if (item && item.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+          const cleanMsg = item.msg.replace(/^Value error,\s*/i, "");
+          return field && field !== "body" ? `${field}: ${cleanMsg}` : cleanMsg;
+        }
+        return JSON.stringify(item);
+      })
+      .join(". ");
+  }
+  if (typeof detail === "object") {
+    return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title: string; zoom: number }) {
   const [icon, setIcon] = useState<any>(null);
   useEffect(() => {
@@ -337,7 +359,7 @@ export default function UserDashboard() {
           }, 1200);
           return;
         }
-        const errMsg = typeof data.detail === "string" ? data.detail : "Failed to save address";
+        const errMsg = formatApiError(data.detail || data.error, "Failed to save address");
         setAddressFeedback({ type: "error", msg: errMsg });
         return;
       }
@@ -402,6 +424,8 @@ export default function UserDashboard() {
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
   const [isTrackingMode, setIsTrackingMode] = useState(false);
 
+  const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
+
   useEffect(() => {
     const u = getStoredUser();
 
@@ -411,7 +435,8 @@ export default function UserDashboard() {
     }
 
     if (u.role !== "user") {
-      window.location.replace(getDashboardUrl(u.role));
+      setRoleMismatchUser(u as any);
+      setAuthLoading(false);
       return;
     }
 
@@ -478,6 +503,41 @@ export default function UserDashboard() {
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);
   const deliveredCount = orders.filter(o => o.status === "DELIVERED").length;
 
+  if (roleMismatchUser) {
+    return (
+      <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-emerald-50 text-[#1E3A2F] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#CDE3D5]">
+            <User size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Customer Account Required</h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong>{roleMismatchUser.email}</strong> ({roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner" : "Delivery Rider"}). To access the Customer Portal, please sign in with a Customer account.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                window.location.replace(getDashboardUrl(roleMismatchUser.role));
+              }}
+              className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+            >
+              Go to {roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner Dashboard" : "Rider Dashboard"}
+            </button>
+            <button
+              onClick={() => {
+                clearAuthSession();
+                window.location.replace("/?auth=login&role=user");
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+            >
+              Sign In with Customer Account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading || !user) return (
     <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
       <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
@@ -501,7 +561,10 @@ export default function UserDashboard() {
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Customer Portal</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <a href="/dashboard/shop" className="hidden sm:flex items-center gap-1.5 text-[#1E3A2F] hover:bg-[#E8F3ED] text-xs font-bold px-3 py-2 rounded-full border border-[#D5E6DC] transition-colors">
+              <Store size={14} /> Shop Owner Portal
+            </a>
             <div className="flex items-center gap-2 bg-[#F0F6F2] border border-[#D5E6DC] px-4 py-2 rounded-full text-xs">
               <Award size={15} className="text-[#1E3A2F]" />
               <span className="font-black text-[#1E3A2F]">{loyaltyPoints} Loyalty Pts</span>
