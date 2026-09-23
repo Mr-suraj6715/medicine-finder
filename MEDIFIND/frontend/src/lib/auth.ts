@@ -30,23 +30,38 @@ export function deleteCookie(name: string) {
   document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax`;
 }
 
+// Normalize role string safely
+export function normalizeRole(role?: string): UserRole {
+  if (!role) return "user";
+  const r = role.toLowerCase().trim();
+  if (r === "shop_owner" || r === "shopowner") return "shop_owner";
+  if (r === "rider") return "rider";
+  return "user";
+}
+
 // Session persistence
 export function saveAuthSession(user: AuthUser, token?: string) {
   if (typeof window === "undefined") return;
-  const userJson = JSON.stringify(user);
+  const role = normalizeRole(user.role);
+  const normalizedUser: AuthUser = { ...user, role };
+  const userJson = JSON.stringify(normalizedUser);
   
-  // Set in localStorage
+  // Clean up legacy multi-role keys to eliminate cross-role contamination
+  localStorage.removeItem("medifind_active_role");
+  localStorage.removeItem("medifind_user_user");
+  localStorage.removeItem("medifind_user_shop_owner");
+  localStorage.removeItem("medifind_user_rider");
+
+  // Set single authoritative user in localStorage
   localStorage.setItem("medifind_user", userJson);
-  localStorage.setItem("medifind_role", user.role);
-  localStorage.setItem("medifind_active_role", user.role);
-  localStorage.setItem(`medifind_user_${user.role}`, userJson);
+  localStorage.setItem("medifind_role", role);
   if (token) {
     localStorage.setItem("medifind_token", token);
     setCookie("medifind_token", token);
   }
   
   // Set in cookies for middleware and server route guards
-  setCookie("medifind_role", user.role);
+  setCookie("medifind_role", role);
   setCookie("medifind_user", userJson);
 }
 
@@ -66,24 +81,32 @@ export function clearAuthSession() {
   deleteCookie("medifind_user");
 }
 
+export function parseJwtPayload(token: string): any | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payloadBase64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = atob(payloadBase64);
+      return JSON.parse(decoded);
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   const token = localStorage.getItem("medifind_token") || getCookie("medifind_token");
   if (!token || token === "undefined" || token === "null" || token.trim() === "") return null;
 
   // Validate token expiration if it is a standard JWT
-  try {
-    const parts = token.split(".");
-    if (parts.length === 3) {
-      const payload = JSON.parse(atob(parts[1]));
-      if (payload.exp && payload.exp * 1000 < Date.now()) {
-        clearAuthSession();
-        return null;
-      }
+  const payload = parseJwtPayload(token);
+  if (payload) {
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      clearAuthSession();
+      return null;
     }
-  } catch {
-    clearAuthSession();
-    return null;
   }
 
   return token;
@@ -99,22 +122,49 @@ export function getStoredUser(): AuthUser | null {
     return null;
   }
 
-  const activeRole = localStorage.getItem("medifind_active_role") || getCookie("medifind_role");
-  const raw = (activeRole ? localStorage.getItem(`medifind_user_${activeRole}`) : null) 
-    || localStorage.getItem("medifind_user") 
-    || getCookie("medifind_user");
-  if (!raw || raw === "undefined" || raw === "null") return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    clearAuthSession();
-    return null;
+  // Cryptographic token claims are the source of truth for user identity and role
+  const tokenPayload = parseJwtPayload(token);
+  const tokenRole = tokenPayload?.role ? normalizeRole(tokenPayload.role) : null;
+  const tokenUserId = tokenPayload?.userId || tokenPayload?.id;
+  const tokenEmail = tokenPayload?.email || tokenPayload?.sub;
+  const tokenName = tokenPayload?.name;
+
+  const raw = localStorage.getItem("medifind_user") || getCookie("medifind_user");
+  let user: AuthUser | null = null;
+  if (raw && raw !== "undefined" && raw !== "null") {
+    try {
+      user = JSON.parse(raw);
+    } catch {
+      user = null;
+    }
   }
+
+  // If localStorage user is missing or role conflicts with the signed token, enforce token truth
+  if (!user && tokenEmail) {
+    user = {
+      id: tokenUserId || "",
+      email: tokenEmail,
+      name: tokenName || tokenEmail.split("@")[0],
+      role: tokenRole || "user",
+    };
+    saveAuthSession(user, token);
+    return user;
+  }
+
+  if (user && tokenRole && user.role !== tokenRole) {
+    user.role = tokenRole;
+    if (tokenUserId) user.id = tokenUserId;
+    if (tokenEmail) user.email = tokenEmail;
+    saveAuthSession(user, token);
+  }
+
+  return user;
 }
 
 export function getDashboardUrl(role?: string): string {
-  if (role === "shop_owner") return "/dashboard/shop";
-  if (role === "rider") return "/dashboard/rider";
+  const r = normalizeRole(role);
+  if (r === "shop_owner") return "/dashboard/shop";
+  if (r === "rider") return "/dashboard/rider";
   return "/dashboard/user";
 }
 

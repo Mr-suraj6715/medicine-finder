@@ -27,16 +27,30 @@ def check_reset_rate_limit(key: str, max_requests: int = 3, window_minutes: int 
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+ROLE_MAP = {"user": "Customer", "shop_owner": "Medical Shop Owner", "rider": "Delivery Rider"}
+
+def normalize_role(r: Optional[str]) -> Optional[str]:
+    if not r:
+        return None
+    val = r.strip().lower()
+    if val in ["user", "customer"]:
+        return "user"
+    if val == "shop_owner":
+        return "shop_owner"
+    if val == "rider":
+        return "rider"
+    return val
+
 @router.post("/login")
 def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
     try:
         email = req.email.lower().strip()
         user = db.query(models.User).filter(models.User.email == email).first()
-        role_map = {"user": "Customer", "shop_owner": "Medical Shop Owner", "rider": "Delivery Rider"}
         
         # Auto-create & bypass authentication for official demo/mock accounts
         if email == "demo@medstore.com":
-            if req.role and req.role != "user":
+            req_role = normalize_role(req.role)
+            if req_role and req_role != "user":
                 raise HTTPException(
                     status_code=400,
                     detail="demo@medstore.com is registered as a Customer. Please switch to the Customer tab to sign in."
@@ -46,11 +60,12 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_token_for_user(user)
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "Demo Customer", "role": "user", "loyaltyPoints": user.loyaltyPoints or 0}}
         
         if email == "shop@medstore.com":
-            if req.role and req.role != "shop_owner":
+            req_role = normalize_role(req.role)
+            if req_role and req_role != "shop_owner":
                 raise HTTPException(
                     status_code=400,
                     detail="shop@medstore.com is registered as a Medical Shop Owner. Please switch to the Shop Owner tab to sign in."
@@ -79,11 +94,12 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(pharmacy)
                 db.commit()
 
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_token_for_user(user)
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "MediStore Pharmacy", "role": "shop_owner", "loyaltyPoints": user.loyaltyPoints or 0}}
         
         if email == "rider@medstore.com":
-            if req.role and req.role != "rider":
+            req_role = normalize_role(req.role)
+            if req_role and req_role != "rider":
                 raise HTTPException(
                     status_code=400,
                     detail="rider@medstore.com is registered as a Delivery Rider. Please switch to the Rider tab to sign in."
@@ -93,7 +109,7 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
                 db.add(user)
                 db.commit()
                 db.refresh(user)
-            access_token = auth.create_access_token(data={"sub": user.email})
+            access_token = auth.create_token_for_user(user)
             return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name or "Rider Partner", "role": "rider", "loyaltyPoints": user.loyaltyPoints or 0}}
 
         if not user:
@@ -106,16 +122,18 @@ def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
             if req.password:
                 raise HTTPException(status_code=401, detail="Invalid email or password")
         
-        # Enforce role matching when role tab is explicitly selected
-        if req.role and req.role in ["user", "shop_owner", "rider"] and user.role != req.role:
-            target_role = role_map.get(user.role, user.role)
+        # Enforce role matching when role portal/tab is selected
+        user_db_role = normalize_role(user.role) or "user"
+        req_role = normalize_role(req.role)
+        if req_role and req_role in ["user", "shop_owner", "rider"] and user_db_role != req_role:
+            target_role_display = ROLE_MAP.get(user_db_role, "Customer")
             raise HTTPException(
                 status_code=400,
-                detail=f"This account is registered as a {target_role}. Please switch to the {target_role} tab to log in."
+                detail=f"This account is registered as a {target_role_display}. Please switch to the {target_role_display} tab to sign in."
             )
             
-        access_token = auth.create_access_token(data={"sub": user.email})
-        return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role, "loyaltyPoints": user.loyaltyPoints or 0}}
+        access_token = auth.create_token_for_user(user)
+        return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user_db_role, "loyaltyPoints": user.loyaltyPoints or 0}}
     except HTTPException:
         raise
     except Exception as err:
@@ -129,11 +147,14 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use")
         
-        role = req.role if req.role in ["user", "shop_owner", "rider"] else "user"
+        role = normalize_role(req.role) or "user"
+        if role not in ["user", "shop_owner", "rider"]:
+            role = "user"
+
         hashed_pw = auth.hash_password(req.password)
         user = models.User(
             id=generate_cuid(),
-            name=req.name,
+            name=req.name.strip(),
             email=email,
             password=hashed_pw,
             role=role,
@@ -182,7 +203,7 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
         except Exception as e:
             print(f"[AUTH_SIGNUP] n8n event error: {e}")
 
-        access_token = auth.create_access_token(data={"sub": user.email})
+        access_token = auth.create_token_for_user(user)
         return {"success": True, "token": access_token, "user": {"id": user.id, "email": user.email, "name": user.name, "role": user.role, "loyaltyPoints": 0}}
     except HTTPException:
         raise

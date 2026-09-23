@@ -212,6 +212,7 @@ export default function UserDashboard() {
     phone: "",
     houseNumber: "",
     street: "",
+    area: "",
     landmark: "",
     city: "Mumbai",
     state: "Maharashtra",
@@ -245,6 +246,7 @@ export default function UserDashboard() {
       phone: user?.phone || "",
       houseNumber: "",
       street: "",
+      area: "",
       landmark: "",
       city: "Mumbai",
       state: "Maharashtra",
@@ -261,7 +263,8 @@ export default function UserDashboard() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    const rawPhone = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+    const cleanPhone = rawPhone.startsWith("+91") ? rawPhone.slice(3) : rawPhone.startsWith("91") && rawPhone.length === 12 ? rawPhone.slice(2) : rawPhone.startsWith("0") && rawPhone.length === 11 ? rawPhone.slice(1) : rawPhone;
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       errs.phone = "Enter a valid 10-digit Indian mobile number";
     }
@@ -307,13 +310,15 @@ export default function UserDashboard() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      const rawPhone2 = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+      const cleanPhone = rawPhone2.startsWith("+91") ? rawPhone2.slice(3) : rawPhone2.startsWith("91") && rawPhone2.length === 12 ? rawPhone2.slice(2) : rawPhone2.startsWith("0") && rawPhone2.length === 11 ? rawPhone2.slice(1) : rawPhone2;
       const payload: any = {
         ...addressForm,
         fullName: addressForm.fullName.trim(),
         phone: cleanPhone,
         houseNumber: addressForm.houseNumber.trim(),
         street: addressForm.street.trim(),
+        area: addressForm.area ? addressForm.area.trim() : null,
         landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
@@ -354,6 +359,7 @@ export default function UserDashboard() {
       phone: addr.phone || "",
       houseNumber: addr.houseNumber || "",
       street: addr.street || "",
+      area: addr.area || "",
       landmark: addr.landmark || "",
       city: addr.city || "",
       state: addr.state || "",
@@ -809,7 +815,7 @@ export default function UserDashboard() {
               {/* Phone */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
-                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="10-digit mobile number" maxLength={10} />
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g. 9820011221 or +91 98200 11221" />
                 {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
               </div>
 
@@ -825,6 +831,12 @@ export default function UserDashboard() {
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
                 <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g., MG Road, Andheri West" />
                 {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Area / Locality (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Area / Locality <span className="text-slate-400">(Optional)</span></label>
+                <input value={addressForm.area} onChange={e => setAddressForm(p => ({ ...p, area: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="e.g. Andheri East, Bandra West" />
               </div>
 
               {/* Landmark (optional) */}

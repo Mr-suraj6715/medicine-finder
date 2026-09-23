@@ -1,14 +1,40 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+function getVerifiedRoleFromToken(token?: string): string | null {
+  if (!token) return null;
+  try {
+    const parts = token.split(".");
+    if (parts.length === 3) {
+      const payloadBase64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const decoded = atob(payloadBase64);
+      const payload = JSON.parse(decoded);
+      if (payload.exp && payload.exp * 1000 < Date.now()) {
+        return null;
+      }
+      if (payload.role) {
+        const r = String(payload.role).toLowerCase().trim();
+        if (r === "shop_owner" || r === "shopowner") return "shop_owner";
+        if (r === "rider") return "rider";
+        return "user";
+      }
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/dashboard")) {
-    const roleCookie = request.cookies.get("medifind_role")?.value;
     const tokenCookie = request.cookies.get("medifind_token")?.value;
+    const verifiedRole = getVerifiedRoleFromToken(tokenCookie);
+    const roleCookie = request.cookies.get("medifind_role")?.value?.toLowerCase().trim();
+    const effectiveRole = verifiedRole || roleCookie;
 
-    const isAuthenticated = !!(roleCookie && tokenCookie);
+    const isAuthenticated = !!(tokenCookie && effectiveRole);
 
     if (pathname.startsWith("/dashboard/shop")) {
       if (!isAuthenticated) {
@@ -17,8 +43,8 @@ export function proxy(request: NextRequest) {
         loginUrl.searchParams.set("role", "shop_owner");
         return NextResponse.redirect(loginUrl);
       }
-      if (roleCookie !== "shop_owner") {
-        if (roleCookie === "rider") {
+      if (effectiveRole !== "shop_owner") {
+        if (effectiveRole === "rider") {
           return NextResponse.redirect(new URL("/dashboard/rider", request.url));
         }
         return NextResponse.redirect(new URL("/dashboard/user", request.url));
@@ -30,10 +56,10 @@ export function proxy(request: NextRequest) {
         loginUrl.searchParams.set("role", "user");
         return NextResponse.redirect(loginUrl);
       }
-      if (roleCookie !== "user") {
-        if (roleCookie === "shop_owner") {
+      if (effectiveRole !== "user") {
+        if (effectiveRole === "shop_owner") {
           return NextResponse.redirect(new URL("/dashboard/shop", request.url));
-        } else if (roleCookie === "rider") {
+        } else if (effectiveRole === "rider") {
           return NextResponse.redirect(new URL("/dashboard/rider", request.url));
         }
       }
@@ -44,10 +70,10 @@ export function proxy(request: NextRequest) {
         loginUrl.searchParams.set("role", "rider");
         return NextResponse.redirect(loginUrl);
       }
-      if (roleCookie !== "rider") {
-        if (roleCookie === "shop_owner") {
+      if (effectiveRole !== "rider") {
+        if (effectiveRole === "shop_owner") {
           return NextResponse.redirect(new URL("/dashboard/shop", request.url));
-        } else if (roleCookie === "user") {
+        } else if (effectiveRole === "user") {
           return NextResponse.redirect(new URL("/dashboard/user", request.url));
         }
       }
