@@ -28,6 +28,15 @@ def run_e2e_report():
         })
         print(f"[{result}] {module} -> {test_name}")
 
+    # Clean up any leftover active orders for test riders from previous runs for idempotency
+    test_rider_ids = [r.id for r in db.query(models.User).filter(models.User.email.in_(["rider01@medifind.test", "rider02@medifind.test", "rider03@medifind.test"])).all()]
+    if test_rider_ids:
+        db.query(models.Order).filter(
+            models.Order.status.in_(["RIDER_ASSIGNED", "RIDER_AT_PHARMACY", "RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER", "PENDING_RIDER_ACCEPT"]),
+            models.Order.riderId.in_(test_rider_ids)
+        ).update({"status": "DELIVERED"}, synchronize_session=False)
+        db.commit()
+
     # --- 1. USER AUTHENTICATION & ROLE ISOLATION ---
     try:
         # Test customer login

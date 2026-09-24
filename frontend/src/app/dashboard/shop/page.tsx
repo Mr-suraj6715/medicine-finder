@@ -36,6 +36,7 @@ export default function ShopDashboard() {
   const [riders, setRiders] = useState<any[]>([]);
   const [reassignModalOrder, setReassignModalOrder] = useState<any | null>(null);
   const [reassigning, setReassigning] = useState(false);
+  const [assigningRiderId, setAssigningRiderId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMed, setNewMed] = useState({ name: "", category: "", price: "", stock: "" });
   const [editingStock, setEditingStock] = useState<string | null>(null);
@@ -213,6 +214,7 @@ export default function ShopDashboard() {
   };
 
   const handleReassignRider = async (orderId: string, riderId: string) => {
+    setAssigningRiderId(riderId);
     setReassigning(true);
     try {
       const res = await fetch('/api/shop/reassign', {
@@ -224,13 +226,15 @@ export default function ShopDashboard() {
       if (res.ok && data.success) {
         setReassignModalOrder(null);
         if (user) fetchShopData(user.id);
+        fetchRiders();
       } else {
-        alert(data.error || "Failed to assign rider");
+        alert(data.detail || data.error || data.message || "Failed to assign rider");
       }
     } catch (e) {
       console.error(e);
       alert("Network error reassigning rider");
     } finally {
+      setAssigningRiderId(null);
       setReassigning(false);
     }
   };
@@ -1432,13 +1436,13 @@ export default function ShopDashboard() {
                     </div>
                     <button
                       onClick={() => handleReassignRider(reassignModalOrder.realId || reassignModalOrder.id, r.id)}
-                      disabled={reassigning || r.isBusy}
+                      disabled={!!assigningRiderId || r.isBusy}
                       title={r.isBusy ? "Rider is currently busy with another delivery" : "Assign this rider"}
                       className={`text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider ${
                         r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white disabled:opacity-50"
                       }`}
                     >
-                      {reassigning ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
+                      {assigningRiderId === r.id ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
                     </button>
                   </div>
                 ))

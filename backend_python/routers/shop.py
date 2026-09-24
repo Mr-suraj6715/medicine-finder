@@ -106,13 +106,18 @@ def get_available_riders(db: Session = Depends(get_db), current_user: models.Use
 def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     """
     Shopkeeper assigns an order to a specific rider.
-    Sets status to PENDING_RIDER_ACCEPT so the rider must explicitly accept/reject.
+    Sets status to RIDER_ASSIGNED so it immediately appears in the Rider Dashboard.
     """
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can assign riders")
 
-    order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
-    rider = db.query(models.User).filter(models.User.id == req.riderId, models.User.role == "rider").first()
+    target_order_id = (req.orderId or "").strip()
+    target_rider_id = (req.riderId or "").strip()
+
+    order = db.query(models.Order).filter(
+        or_(models.Order.id == target_order_id, models.Order.trackingNumber == target_order_id)
+    ).first()
+    rider = db.query(models.User).filter(models.User.id == target_rider_id, models.User.role == "rider").first()
 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -125,24 +130,50 @@ def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), cur
 
     # Prevent re-assigning if rider is currently busy with another active delivery
     busy_order = db.query(models.Order).filter(
-        models.Order.riderId == req.riderId,
+        models.Order.riderId == target_rider_id,
         models.Order.status.in_(list(RIDER_BUSY_STATUSES))
     ).first()
     if busy_order and busy_order.id != order.id:
-        raise HTTPException(status_code=409, detail=f"Rider is currently busy with order {busy_order.id[:8]}... — please choose another rider.")
+        raise HTTPException(status_code=409, detail=f"Rider {rider.name or rider.email} is currently on an active delivery ({busy_order.trackingNumber or busy_order.id[:8]}). Please select another rider.")
 
-    # If this order was previously assigned to a different rider, release them first
-    if order.riderId and order.riderId != req.riderId:
+    # If this order was previously assigned to a different rider, track them as cancelled
+    if order.riderId and order.riderId != target_rider_id:
         order.cancelledRiderId = order.riderId
 
     earnings_factor = 1.0 if rider.riderRating >= 4.0 else (0.5 if rider.riderRating >= 3.0 else 0.0)
-    order.riderId = req.riderId
-    # Use PENDING_RIDER_ACCEPT so the rider sees and can accept/reject
-    order.status = "PENDING_RIDER_ACCEPT"
+    order.riderId = target_rider_id
+    previous_status = order.status
+    order.status = "RIDER_ASSIGNED"
     order.driverEarnings = (order.surgeFee * earnings_factor) if order.isEmergency else 0.0
 
+    order_user = db.query(models.User).filter(models.User.id == order.userId).first()
+
     db.commit()
-    return {"success": True, "message": f"Assignment sent to {rider.name or rider.email}. Awaiting rider acceptance."}
+
+    # Emit n8n events
+    n8n_service.emit_rider_assigned(
+        order_id=order.id,
+        tracking_number=order.trackingNumber,
+        rider_id=rider.id,
+        rider_email=rider.email,
+        rider_name=rider.name,
+        user_email=order_user.email if order_user else None,
+        user_name=order_user.name if order_user else None,
+        delivery_address=order.deliveryAddress,
+    )
+    n8n_service.emit_order_status_changed(
+        order_id=order.id,
+        tracking_number=order.trackingNumber,
+        previous_status=previous_status,
+        new_status="RIDER_ASSIGNED",
+        user_email=order_user.email if order_user else None,
+        user_name=order_user.name if order_user else None,
+        rider_email=rider.email,
+        rider_name=rider.name,
+        delivery_address=order.deliveryAddress,
+    )
+
+    return {"success": True, "message": f"Order assigned to {rider.name or rider.email} successfully!"}
 
 @router.get("/orders")
 def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):

@@ -161,7 +161,10 @@ def update_rider_order_status(req: schemas.OrderStatusUpdate, db: Session = Depe
     if current_user.role != "rider":
         raise HTTPException(status_code=403, detail="Forbidden: Only riders can update order status")
 
-    order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
+    target_order_id = (req.orderId or "").strip()
+    order = db.query(models.Order).filter(
+        or_(models.Order.id == target_order_id, models.Order.trackingNumber == target_order_id)
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
@@ -256,23 +259,30 @@ def accept_or_reject_order(req: schemas.RiderAcceptOrder, db: Session = Depends(
     if current_user.role != "rider" or current_user.id != req.riderId:
         raise HTTPException(status_code=403, detail="Forbidden: Rider ID mismatch")
 
+    target_order_id = (req.orderId or "").strip()
     rider = db.query(models.User).filter(models.User.id == req.riderId).first()
-    order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
+    order = db.query(models.Order).filter(
+        or_(models.Order.id == target_order_id, models.Order.trackingNumber == target_order_id)
+    ).first()
     if not rider or not order:
         raise HTTPException(status_code=404, detail="Rider or Order not found")
+
+    # If already assigned to this rider, return success idempotently
+    if order.riderId == req.riderId and order.status == "RIDER_ASSIGNED":
+        return {"success": True, "status": "RIDER_ASSIGNED", "message": "Order is active! Head to the pharmacy."}
 
     # Ensure this rider is allowed to accept
     if order.status == "PENDING_RIDER_ACCEPT" and order.riderId != req.riderId:
         raise HTTPException(status_code=403, detail="This order is assigned to a different rider")
 
-    if order.status not in ("CONFIRMED", "PENDING_RIDER_ACCEPT"):
+    if order.status not in ("CONFIRMED", "PENDING_RIDER_ACCEPT", "RIDER_ASSIGNED"):
         raise HTTPException(status_code=400, detail=f"Order cannot be accepted in status: {order.status}")
 
     # Check rider isn't already busy with another active order
     busy_order = db.query(models.Order).filter(
         models.Order.riderId == req.riderId,
         models.Order.status.in_(["RIDER_ASSIGNED", "RIDER_AT_PHARMACY", "RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER"]),
-        models.Order.id != req.orderId
+        models.Order.id != order.id
     ).first()
     if busy_order:
         raise HTTPException(status_code=409, detail="You already have an active delivery in progress. Complete it first.")
@@ -311,18 +321,21 @@ def accept_or_reject_order(req: schemas.RiderAcceptOrder, db: Session = Depends(
 @router.delete("/orders")
 def reject_assigned_order(req: schemas.RiderAcceptOrder, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     """
-    Rider rejects a shopkeeper-assigned order (PENDING_RIDER_ACCEPT → CONFIRMED + riderId=None).
+    Rider rejects a shopkeeper-assigned order (PENDING_RIDER_ACCEPT / RIDER_ASSIGNED → CONFIRMED + riderId=None).
     The order becomes re-assignable by the shopkeeper.
     """
     if current_user.role != "rider" or current_user.id != req.riderId:
         raise HTTPException(status_code=403, detail="Forbidden: Rider ID mismatch")
 
-    order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
+    target_order_id = (req.orderId or "").strip()
+    order = db.query(models.Order).filter(
+        or_(models.Order.id == target_order_id, models.Order.trackingNumber == target_order_id)
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.status != "PENDING_RIDER_ACCEPT":
-        raise HTTPException(status_code=400, detail="Only PENDING_RIDER_ACCEPT orders can be rejected")
+    if order.status not in ("PENDING_RIDER_ACCEPT", "RIDER_ASSIGNED"):
+        raise HTTPException(status_code=400, detail="Only pending or newly assigned orders can be released")
 
     if order.riderId != req.riderId:
         raise HTTPException(status_code=403, detail="This order was not assigned to you")
@@ -338,7 +351,7 @@ def reject_assigned_order(req: schemas.RiderAcceptOrder, db: Session = Depends(g
         rider.cancelledDeliveries += 1
 
     db.commit()
-    return {"success": True, "status": "CONFIRMED", "message": "Order rejected. Shopkeeper will be notified."}
+    return {"success": True, "status": "CONFIRMED", "message": "Order released. Shopkeeper can reassign."}
 
 @router.patch("/orders")
 def update_rider_location(req: schemas.RiderLocationUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):

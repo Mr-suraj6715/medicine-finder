@@ -71,16 +71,29 @@ def get_user_orders(email: str = Query(...), db: Session = Depends(get_db), curr
             "pharmacy": {
                 "name": pharmacy.name if pharmacy else "Local Pharmacy",
                 "phone": pharmacy.phone if pharmacy else "N/A",
-                "location": pharmacy.location if pharmacy else "Mumbai, MH"
-            } if pharmacy else None,
+                "location": pharmacy.location if pharmacy else "Mumbai, MH",
+                "latitude": (pharmacy.latitude if pharmacy and pharmacy.latitude else 19.0760),
+                "longitude": (pharmacy.longitude if pharmacy and pharmacy.longitude else 72.8777),
+            } if pharmacy else {
+                "name": "Local Pharmacy",
+                "phone": "N/A",
+                "location": "Mumbai, MH",
+                "latitude": 19.0760,
+                "longitude": 72.8777,
+            },
             "rider": {
                 "id": o.rider.id,
                 "name": o.rider.name or o.rider.email,
                 "email": o.rider.email,
-                "phone": o.rider.phone or "N/A",
+                "phone": o.rider.phone or "",
                 "rating": o.rider.riderRating or 5.0,
-                "riderRating": o.rider.riderRating or 5.0
-            } if o.rider else None
+                "riderRating": o.rider.riderRating or 5.0,
+                "vehicleType": o.rider.vehicleType or "Motorcycle",
+                "latitude": (o.rider.latitude if o.rider and o.rider.latitude else 19.0780),
+                "longitude": (o.rider.longitude if o.rider and o.rider.longitude else 72.8790),
+            } if o.rider else None,
+            "deliveryLat": o.deliveryLat or 19.0820,
+            "deliveryLng": o.deliveryLng or 72.8810,
         })
 
     return {"orders": mapped_orders}

@@ -551,11 +551,54 @@ export default function RiderDashboard() {
           </div>
         ) : tab !== "profile" && (
           <div className="space-y-6">
-            {tab === "active" && activeOrders.length === 0 && (
+            {tab === "active" && pendingAssignments.length > 0 && (
+              <div className="bg-amber-50 border-2 border-amber-300 rounded-[28px] p-6 mb-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500 text-white flex items-center justify-center font-black animate-bounce shadow">
+                    <AlertCircle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base">New Delivery Assigned to You! 🚴</h3>
+                    <p className="text-xs text-amber-800 font-medium">A pharmacy directly assigned this order to you. Review and accept to start delivery.</p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  {pendingAssignments.map(order => (
+                    <div key={order.id} className="bg-white rounded-2xl p-5 border border-amber-200 shadow-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <span className="font-bold text-slate-900 text-sm">Order #{order.id.slice(-6)}</span>
+                          {order.isEmergency && <span className="ml-2 text-[10px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full uppercase">EMERGENCY</span>}
+                          <p className="text-xs text-slate-500 mt-0.5">{order.pharmacyName} → {order.customer}</p>
+                        </div>
+                        <p className="font-black text-lg text-[#1E3A2F]">₹{(order.total || 0).toFixed(2)}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => acceptOrder(order.realId || order.id)}
+                          className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white py-2.5 rounded-full font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow"
+                        >
+                          <CheckCircle size={14} /> Accept & Start
+                        </button>
+                        <button
+                          onClick={() => rejectAssignment(order.realId || order.id)}
+                          className="px-5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5"
+                        >
+                          <X size={14} /> Decline
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {tab === "active" && activeOrders.length === 0 && pendingAssignments.length === 0 && (
               <div className="text-center py-20 bg-white rounded-[32px] border border-dashed border-[#D5E6DC]">
                 <Navigation size={48} className="mx-auto text-slate-300 mb-4" />
                 <h3 className="text-lg font-bold text-slate-900">No active deliveries right now</h3>
-                <p className="text-slate-400 text-sm mt-1">Accept a pending task from the available orders list.</p>
+                <p className="text-slate-400 text-sm mt-1">Accept an assigned order above or check available tasks.</p>
                 <button onClick={() => setTab("available")} className="mt-6 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95">View Available Orders</button>
               </div>
             )}
@@ -749,14 +792,19 @@ export default function RiderDashboard() {
                       </button>
                     )}
                     {order.status === "OUT_FOR_DELIVERY" && (
-                      <button onClick={() => updateStatus(order.realId || order.id, "REACHED_CUSTOMER")} className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
-                        <MapPin size={14} /> Reached Destination
-                      </button>
+                      <>
+                        <button onClick={() => updateStatus(order.realId || order.id, "REACHED_CUSTOMER")} className="w-full bg-pink-600 hover:bg-pink-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                          <MapPin size={14} /> Reached Destination
+                        </button>
+                        <button onClick={() => updateStatus(order.realId || order.id, "DELIVERED")} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                          <CheckCircle size={14} /> Mark Delivered
+                        </button>
+                      </>
                     )}
                     {order.status === "REACHED_CUSTOMER" && (
-                      <div className="sm:col-span-2 p-4 bg-[#E8F3ED] text-[#1E3A2F] rounded-2xl text-center font-bold text-xs border border-[#CDE3D5]">
-                        Rider reached customer location. Awaiting final order verification.
-                      </div>
+                      <button onClick={() => updateStatus(order.realId || order.id, "DELIVERED")} className="sm:col-span-2 w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                        <CheckCircle size={14} /> Complete Delivery (Mark Delivered)
+                      </button>
                     )}
                   </div>
                 )}
