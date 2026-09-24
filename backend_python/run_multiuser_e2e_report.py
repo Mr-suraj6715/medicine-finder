@@ -275,9 +275,9 @@ def run_e2e_report():
         # Rider 01 cancels assignment
         r_cancel = client.post("/api/rider/orders", json={"orderId": ord2_id, "status": "CANCELLED", "riderId": rider1_user.id}, headers=headers_rider1)
 
-        # Rider 02 accepts
-        rider2_user = db.query(models.User).filter(models.User.email == "rider02@medifind.test").first()
-        rider2_token = client.post("/api/auth/login", json={"email": "rider02@medifind.test", "password": "Rider@123", "role": "rider"}).json()["token"]
+        # Available Rider (rider03) accepts
+        rider2_user = db.query(models.User).filter(models.User.email == "rider03@medifind.test").first()
+        rider2_token = client.post("/api/auth/login", json={"email": "rider03@medifind.test", "password": "Rider@123", "role": "rider"}).json()["token"]
         headers_rider2 = {"Authorization": f"Bearer {rider2_token}"}
 
         r_reassign = client.put("/api/rider/orders", json={"orderId": ord2_id, "riderId": rider2_user.id}, headers=headers_rider2)
