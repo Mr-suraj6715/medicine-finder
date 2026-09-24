@@ -1218,9 +1218,20 @@ export default function Home() {
 
   const handlePlaceOrder = async () => {
     if (!user || cart.length === 0) return;
-    const selAddr = userAddresses.find(a => a.id === selectedAddressId);
-    if (!selAddr) { alert("Please select a delivery address."); return; }
-    
+
+    // Build delivery address — prefer saved address, fall back to profile address or default
+    const selAddr = userAddresses.find(a => a.id === selectedAddressId) || userAddresses[0];
+    const deliveryAddress = selAddr
+      ? (selAddr.address || [selAddr.houseNumber, selAddr.street, selAddr.landmark, selAddr.city, selAddr.pincode].filter(Boolean).join(", "))
+      : (user?.address || "Mumbai, Maharashtra");
+
+    // Validate cart items have real inventory IDs (not temp- placeholders)
+    const invalidItems = cart.filter(i => !i.inventory.id || i.inventory.id.startsWith("temp-"));
+    if (invalidItems.length > 0) {
+      alert("Some items in your cart are not available. Please remove them and add again.");
+      return;
+    }
+
     setIsOrdering(true);
     try {
       const res = await fetch("/api/orders", {
@@ -1232,10 +1243,15 @@ export default function Home() {
           items: cart.map(i => ({ inventoryId: i.inventory.id, quantity: i.quantity, priceAtTime: i.inventory.price })),
           isEmergency: isEmergencyMode,
           paymentMethod,
-          deliveryAddress: selAddr?.address || [selAddr?.houseNumber, selAddr?.street, selAddr?.landmark, selAddr?.city, selAddr?.pincode].filter(Boolean).join(", ") || user?.address || "Mumbai, Maharashtra",
+          deliveryAddress,
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        const errMsg = data?.detail || data?.error || `Order failed (${res.status})`;
+        alert(`Could not place order: ${typeof errMsg === "string" ? errMsg : JSON.stringify(errMsg)}`);
+        return;
+      }
       if (data.orderId || data.trackingNumber) { 
         setTrackingOrder(data); 
         localStorage.setItem("medifind_active_order_id", data.orderId || data.trackingNumber);
@@ -1244,8 +1260,15 @@ export default function Home() {
         setIsCartOpen(false); 
         setIsEmergencyMode(false); 
         fetchLoyalty(); 
+      } else {
+        alert("Order submission failed. Please try again.");
       }
-    } catch {} finally { setIsOrdering(false); }
+    } catch (err: any) {
+      console.error("Order placement error:", err);
+      alert("Network error. Please check your connection and try again.");
+    } finally { 
+      setIsOrdering(false); 
+    }
   };
 
   const handleSymptomCheck = async (overrideSafetyInfo?: any) => {
