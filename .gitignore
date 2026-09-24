@@ -1,63 +1,46 @@
 # Dependencies
 node_modules/
+frontend/node_modules/
 .pnpm-store/
 
 # Next.js
 .next/
+frontend/.next/
 out/
 build/
 
-# IDEs
-.vscode/
-.idea/
-*.swp
-*.swo
+# Python
+__pycache__/
+backend_python/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+backend_python/.pytest_cache/
+venv/
+env/
+.venv/
 
-# OS files
-.DS_Store
-Thumbs.db
-
-# Environment variables
+# Environment variables & secrets
 .env
+*.env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
-*.env
+frontend/.env
+backend_python/.env
 
-# Prisma
-/MEDIFIND/frontend/prisma/dev.db
-/MEDIFIND/frontend/prisma/dev.db-journal
-
-# Logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# TypeScript
-*.tsbuildinfo
-next-env.d.ts
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.pytest_cache/
-venv/
-.venv/
-env/
-
-# Databases
+# Local Databases
 *.db
 *.db-journal
-*.sqlite
-*.sqlite3
+frontend/prisma/dev.db
+frontend/prisma/dev.db-journal
 
-# Antigravity/Gemini data
-.gemini/
-.antigravity/
-.brain/
-storage/
-
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tsbuildinfo
+scratch/

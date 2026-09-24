@@ -1,0 +1,60 @@
+{
+  "name": "MediFind – Rider Assigned Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/rider/assigned",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-rider-assigned",
+      "name": "Webhook: rider.assigned",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-rider-assigned"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst data = payload.data || payload;\n\nreturn [{\n  json: {\n    subject: `🏍️ Rider Assigned to Order ${data.trackingNumber}`,\n    customerNotification: {\n      title: 'Rider on the Way!',\n      message: `${data.riderName || 'A rider'} has accepted your order and is heading to ${data.pharmacyName || 'the pharmacy'}.`,\n      recipientEmail: data.userEmail,\n      recipientName: data.userName\n    },\n    riderNotification: {\n      title: 'Order Pick-up Instructions',\n      pharmacy: data.pharmacyName,\n      deliveryAddress: data.deliveryAddress,\n      recipientEmail: data.riderEmail,\n      recipientName: data.riderName\n    },\n    body: `Order ${data.trackingNumber} has been assigned to rider ${data.riderName} (${data.riderEmail}).\\n` +\n          `Customer: ${data.userName} (${data.userEmail})\\n` +\n          `Pickup: ${data.pharmacyName}\\n` +\n          `Drop: ${data.deliveryAddress}\\n\\n` +\n          `Assigned at: ${payload.timestamp || new Date().toISOString()}`,\n    orderId: data.orderId,\n    trackingNumber: data.trackingNumber,\n    riderId: data.riderId\n  }\n}];\n"
+      },
+      "id": "code-format-rider-assigned",
+      "name": "Format Assignment Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"rider.assigned\"}"
+      },
+      "id": "respond-rider-assigned",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: rider.assigned": {
+      "main": [
+        [
+          {"node": "Format Assignment Data", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-rider-assigned",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "rider", "delivery"]
+}

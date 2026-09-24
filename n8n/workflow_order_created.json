@@ -1,0 +1,82 @@
+{
+  "name": "MediFind – Order Created Notification",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/order/created",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-order-created",
+      "name": "Webhook: order.created",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-order-created"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse the MediFind order.created payload\nconst payload = $input.first().json;\nconst data = payload.data || payload;\n\nconst isEmergency = data.isEmergency === true;\nconst urgencyBadge = isEmergency ? '🚨 EMERGENCY ORDER' : '🛒 New Order';\nconst items = (data.items || []).map(i => `  • ${i.inventoryId || 'Medicine'} × ${i.quantity}`).join('\\n');\n\nreturn [{\n  json: {\n    subject: `${urgencyBadge} — ${data.trackingNumber}`,\n    body: `A new MediFind order has been placed.\\n\\n` +\n          `Tracking: ${data.trackingNumber}\\n` +\n          `Customer: ${data.userName} (${data.userEmail})\\n` +\n          `Total: ₹${data.totalAmount?.toFixed(2) || '0.00'}\\n` +\n          `Payment: ${data.paymentMethod}\\n` +\n          `Delivery To: ${data.deliveryAddress || 'Not provided'}\\n\\n` +\n          `Items (${data.itemCount || 0}):\\n${items || '  (none)'}\\n\\n` +\n          `${isEmergency ? '⚠️ This is a PRIORITY/EMERGENCY order requiring immediate attention.' : ''}\\n\\n` +\n          `Placed at: ${payload.timestamp}`,\n    isEmergency,\n    orderId: data.orderId,\n    trackingNumber: data.trackingNumber,\n    userEmail: data.userEmail,\n    totalAmount: data.totalAmount\n  }\n}];\n"
+      },
+      "id": "code-format-order",
+      "name": "Format Order Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.isEmergency }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "if-emergency",
+      "name": "Is Emergency?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"order.created\"}"
+      },
+      "id": "respond-order",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: order.created": {
+      "main": [
+        [
+          {"node": "Format Order Data", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Format Order Data": {
+      "main": [
+        [{"node": "Is Emergency?", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-order-created",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "orders"]
+}
