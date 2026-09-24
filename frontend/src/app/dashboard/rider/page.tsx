@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-800 border-amber-200",
   PROCESSING: "bg-blue-50 text-blue-800 border-blue-200",
   CONFIRMED: "bg-indigo-50 text-indigo-800 border-indigo-200",
+  PENDING_RIDER_ACCEPT: "bg-amber-50 text-amber-700 border-amber-300",
   RIDER_ASSIGNED: "bg-sky-50 text-sky-800 border-sky-200",
   RIDER_AT_PHARMACY: "bg-teal-50 text-teal-800 border-teal-200",
   RIDER_PICKED_UP: "bg-teal-50 text-teal-800 border-teal-200",
@@ -81,7 +82,7 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
 export default function RiderDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [tab, setTab] = useState<"active" | "available" | "history" | "earnings" | "profile">("active");
+  const [tab, setTab] = useState<"active" | "pending" | "available" | "history" | "earnings" | "profile">("active");
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [riderLocation, setRiderLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -228,12 +229,36 @@ export default function RiderDashboard() {
         headers: getAuthHeaders(),
         body: JSON.stringify({ orderId, riderId: user?.id }),
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (res.ok && data.success) {
         setTab("active");
         fetchRiderData(user!.id, true);
+      } else {
+        alert(data.detail || data.error || "Failed to accept order");
       }
     } catch (e) {
       console.error(e);
+      alert("Network error accepting order");
+    }
+  };
+
+  const rejectAssignment = async (orderId: string) => {
+    if (!window.confirm("Reject this assignment? The shopkeeper will be notified and can assign another rider.")) return;
+    try {
+      const res = await fetch('/api/rider/orders', {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ orderId, riderId: user?.id }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        fetchRiderData(user!.id, true);
+      } else {
+        alert(data.detail || data.error || "Failed to reject order");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Network error rejecting order");
     }
   };
 
@@ -292,9 +317,15 @@ export default function RiderDashboard() {
     }
   };
 
+  // PENDING_RIDER_ACCEPT: shopkeeper directly assigned to this rider — needs accept/reject
+  const pendingAssignments = orders.filter(o => o.status === "PENDING_RIDER_ACCEPT" && o.riderId === user?.id);
+  // CONFIRMED + no riderId = open pool any rider can pick up
   const availableOrders = orders.filter(o => o.status === "CONFIRMED" && !o.riderId);
-  const activeOrders = orders.filter(o => o.riderId === user?.id && !["DELIVERED", "CANCELLED", "FAILED"].includes(o.status));
+  // Active = currently assigned to this rider, in progress
+  const activeOrders = orders.filter(o => o.riderId === user?.id && !["DELIVERED", "CANCELLED", "FAILED", "PENDING_RIDER_ACCEPT"].includes(o.status));
   const historyOrders = orders.filter(o => o.riderId === user?.id && ["DELIVERED", "CANCELLED", "FAILED"].includes(o.status));
+
+  const hasPendingAssignment = pendingAssignments.length > 0;
   
   const emergencyDeliveries = historyOrders.filter(o => o.isEmergency);
   const totalEarnings = emergencyDeliveries.reduce((sum, o) => sum + (o.surgeFee || 0), 0);
@@ -320,6 +351,7 @@ export default function RiderDashboard() {
           <nav className="space-y-1.5">
             {[
               { id: "active", label: "Active Delivery", icon: Play },
+              { id: "pending", label: `Assigned to You${hasPendingAssignment ? ` (${pendingAssignments.length})` : ""}`, icon: AlertCircle },
               { id: "available", label: "Available Tasks", icon: List },
               { id: "history", label: "Delivery History", icon: Package },
               { id: "earnings", label: "My Earnings", icon: DollarSign },
@@ -329,7 +361,7 @@ export default function RiderDashboard() {
                 key={item.id}
                 onClick={() => setTab(item.id as any)}
                 className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-full text-xs font-black uppercase tracking-wider transition-all ${
-                  tab === item.id ? "bg-[#1E3A2F] text-white shadow-md" : "text-slate-600 hover:bg-[#F6FAF7] hover:text-[#1E3A2F]"
+                  tab === item.id ? "bg-[#1E3A2F] text-white shadow-md" : item.id === "pending" && hasPendingAssignment ? "text-amber-700 bg-amber-50 border border-amber-200 animate-pulse" : "text-slate-600 hover:bg-[#F6FAF7] hover:text-[#1E3A2F]"
                 }`}
               >
                 <item.icon size={17} /> {item.label}
@@ -360,13 +392,14 @@ export default function RiderDashboard() {
           <div>
             <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900">
               {tab === "active" && "Active Delivery"}
+              {tab === "pending" && "Assigned to You 📦"}
               {tab === "available" && "Available Tasks"}
               {tab === "history" && "Delivery History"}
               {tab === "earnings" && "My Earnings & Payouts"}
               {tab === "profile" && "Rider Profile 🚴"}
             </h1>
             <p className="text-slate-500 font-medium text-sm mt-1">
-              {tab === "profile" ? "Update your personal details and vehicle configuration." : "Instant medicine pickups and door-to-door delivery tracking."}
+              {tab === "profile" ? "Update your personal details and vehicle configuration." : tab === "pending" ? "A shopkeeper directly assigned these orders to you. Accept or reject each assignment." : "Instant medicine pickups and door-to-door delivery tracking."}
             </p>
           </div>
           {tab === "earnings" && (
@@ -524,6 +557,89 @@ export default function RiderDashboard() {
                 <h3 className="text-lg font-bold text-slate-900">No active deliveries right now</h3>
                 <p className="text-slate-400 text-sm mt-1">Accept a pending task from the available orders list.</p>
                 <button onClick={() => setTab("available")} className="mt-6 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95">View Available Orders</button>
+              </div>
+            )}
+
+            {/* PENDING RIDER ACCEPT TAB — direct shopkeeper assignment */}
+            {tab === "pending" && (
+              <div className="space-y-4">
+                {pendingAssignments.length === 0 ? (
+                  <div className="text-center py-20 bg-white rounded-[32px] border border-dashed border-[#D5E6DC]">
+                    <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
+                    <h3 className="text-lg font-bold text-slate-900">No pending assignments</h3>
+                    <p className="text-slate-400 text-sm mt-1">Shopkeeper-assigned orders will appear here.</p>
+                  </div>
+                ) : pendingAssignments.map(order => (
+                  <div key={order.id} className="bg-white rounded-[28px] shadow-sm border-2 border-amber-200 overflow-hidden p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md bg-amber-500">
+                          <Package size={22} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-slate-900 text-base">Order #{order.id.slice(-6)}</h4>
+                            {order.isEmergency && <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2.5 py-0.5 rounded-full border border-rose-100 uppercase">EMERGENCY</span>}
+                          </div>
+                          <p className="text-xs text-amber-700 font-bold mt-0.5">⚡ Shopkeeper assigned this directly to you</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black text-xl text-[#1E3A2F]">₹{(order.total || 0).toFixed(2)}</p>
+                        <p className="text-[10px] text-amber-600 font-bold uppercase">Awaiting Your Response</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                      <div className="flex items-start gap-3 bg-[#F6FAF7] p-3 rounded-2xl border border-[#E2EFE7]">
+                        <MapPin size={16} className="text-emerald-700 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pick up from</p>
+                          <p className="text-sm font-bold text-slate-800">{order.pharmacyName || "Pharmacy"}</p>
+                          <p className="text-xs text-slate-500">{order.pharmacyAddress}</p>
+                          {order.pharmacyPhone && <p className="text-xs text-slate-400">{order.pharmacyPhone}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-start gap-3 bg-[#F6FAF7] p-3 rounded-2xl border border-[#E2EFE7]">
+                        <Navigation size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Deliver to</p>
+                          <p className="text-sm font-bold text-slate-800">{order.customer}</p>
+                          <p className="text-xs text-slate-500">{order.customerAddress}</p>
+                          {order.customerPhone && <p className="text-xs text-slate-400">{order.customerPhone}</p>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-[#F6FAF7] border border-[#E2EFE7] rounded-2xl p-3 mb-4">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Order Items</p>
+                      {order.items?.map((item: any, idx: number) => (
+                        <div key={idx} className="flex justify-between text-xs py-1">
+                          <span className="font-medium text-slate-700">{item.name} × {item.qty}</span>
+                          <span className="text-slate-500 font-bold">₹{(item.price || 0).toFixed(0)}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-slate-200 pt-2 mt-1 flex justify-between font-black text-sm">
+                        <span>Total</span><span className="text-[#1E3A2F]">₹{(order.total || 0).toFixed(2)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => acceptOrder(order.realId || order.id)}
+                        className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                      >
+                        <CheckCircle size={16} /> Accept Assignment
+                      </button>
+                      <button
+                        onClick={() => rejectAssignment(order.realId || order.id)}
+                        className="flex-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 flex items-center justify-center gap-2"
+                      >
+                        <X size={16} /> Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
 

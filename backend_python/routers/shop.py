@@ -7,6 +7,16 @@ import n8n_service
 
 router = APIRouter(prefix="/api/shop", tags=["shop"])
 
+# Statuses that mean a rider is actively busy (cannot be reassigned another order)
+RIDER_BUSY_STATUSES = {
+    "PENDING_RIDER_ACCEPT",
+    "RIDER_ASSIGNED",
+    "RIDER_AT_PHARMACY",
+    "RIDER_PICKED_UP",
+    "OUT_FOR_DELIVERY",
+    "REACHED_CUSTOMER",
+}
+
 @router.get("/settings")
 def get_shop_settings(pharmacyId: str = Query(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "shop_owner":
@@ -58,22 +68,35 @@ def update_shop_settings(req: schemas.ShopSettingsUpdate, db: Session = Depends(
 
 @router.get("/reassign")
 def get_available_riders(db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """Return all riders with availability status. Riders who have an active delivery are marked busy."""
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can view available riders")
+
     riders = db.query(models.User).filter(models.User.role == "rider").all()
+
+    # Find rider IDs that currently have active/pending deliveries
+    busy_rider_ids = set()
+    busy_orders = db.query(models.Order.riderId).filter(
+        models.Order.riderId != None,
+        models.Order.status.in_(list(RIDER_BUSY_STATUSES))
+    ).all()
+    busy_rider_ids = {row[0] for row in busy_orders}
+
     return {
         "riders": [
             {
                 "id": r.id,
-                "name": r.name,
+                "name": r.name or r.email,
                 "email": r.email,
-                "phone": r.phone,
-                "vehicleType": r.vehicleType,
-                "riderRating": r.riderRating,
-                "completedDeliveries": r.completedDeliveries,
-                "cancelledDeliveries": r.cancelledDeliveries,
+                "phone": r.phone or "",
+                "vehicleType": r.vehicleType or "Motorcycle",
+                "riderRating": r.riderRating or 3.0,
+                "completedDeliveries": r.completedDeliveries or 0,
+                "cancelledDeliveries": r.cancelledDeliveries or 0,
                 "latitude": r.latitude,
-                "longitude": r.longitude
+                "longitude": r.longitude,
+                "isAvailable": r.id not in busy_rider_ids,
+                "isBusy": r.id in busy_rider_ids,
             }
             for r in riders
         ]
@@ -81,25 +104,51 @@ def get_available_riders(db: Session = Depends(get_db), current_user: models.Use
 
 @router.post("/reassign")
 def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+    """
+    Shopkeeper assigns an order to a specific rider.
+    Sets status to PENDING_RIDER_ACCEPT so the rider must explicitly accept/reject.
+    """
     if current_user.role != "shop_owner":
-        raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can reassign riders")
+        raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can assign riders")
+
     order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
-    rider = db.query(models.User).filter(models.User.id == req.riderId).first()
-    if not order or not rider:
-        raise HTTPException(status_code=404, detail="Order or Rider not found")
+    rider = db.query(models.User).filter(models.User.id == req.riderId, models.User.role == "rider").first()
+
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if not rider:
+        raise HTTPException(status_code=404, detail="Rider not found")
+
+    # Prevent assigning an already delivered/cancelled order
+    if order.status in ("DELIVERED", "CANCELLED", "FAILED"):
+        raise HTTPException(status_code=400, detail=f"Cannot assign: order is already {order.status}")
+
+    # Prevent re-assigning if rider is currently busy with another active delivery
+    busy_order = db.query(models.Order).filter(
+        models.Order.riderId == req.riderId,
+        models.Order.status.in_(list(RIDER_BUSY_STATUSES))
+    ).first()
+    if busy_order and busy_order.id != order.id:
+        raise HTTPException(status_code=409, detail=f"Rider is currently busy with order {busy_order.id[:8]}... — please choose another rider.")
+
+    # If this order was previously assigned to a different rider, release them first
+    if order.riderId and order.riderId != req.riderId:
+        order.cancelledRiderId = order.riderId
 
     earnings_factor = 1.0 if rider.riderRating >= 4.0 else (0.5 if rider.riderRating >= 3.0 else 0.0)
     order.riderId = req.riderId
-    order.status = "RIDER_ASSIGNED"
+    # Use PENDING_RIDER_ACCEPT so the rider sees and can accept/reject
+    order.status = "PENDING_RIDER_ACCEPT"
     order.driverEarnings = (order.surgeFee * earnings_factor) if order.isEmergency else 0.0
 
     db.commit()
-    return {"success": True, "message": f"Assigned to {rider.name or rider.email}"}
+    return {"success": True, "message": f"Assignment sent to {rider.name or rider.email}. Awaiting rider acceptance."}
 
 @router.get("/orders")
 def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can access orders")
+
     # 1. Fetch order items specifically for this pharmacy
     specific_items = db.query(models.OrderItem).options(
         joinedload(models.OrderItem.order).joinedload(models.Order.user),
@@ -114,7 +163,7 @@ def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db),
         joinedload(models.OrderItem.inventory).joinedload(models.Inventory.medicine)
     ).order_by(desc(models.OrderItem.id)).limit(100).all()
 
-    # Use all orders if specific query has fewer, or combine
+    # Use pharmacy-specific items if they exist, otherwise fall back to all
     combined_items = specific_items if len(specific_items) > 0 else all_order_items
 
     order_map = {}
@@ -128,10 +177,12 @@ def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db),
                 "realId": o.id,
                 "customer": o.user.name or o.user.email if o.user else "Customer",
                 "customerEmail": o.user.email if o.user else "",
+                "customerPhone": o.user.phone or "" if o.user else "",
                 "customerAddress": o.deliveryAddress or "Mumbai, MH",
                 "items": [],
                 "total": o.totalAmount or 0.0,
                 "status": o.status or "PENDING",
+                "paymentMethod": o.paymentMethod or "CASH_ON_DELIVERY",
                 "isEmergency": o.isEmergency or False,
                 "surgeFee": o.surgeFee or 0.0,
                 "riderId": o.riderId,
@@ -150,6 +201,11 @@ def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db),
         })
 
     orders_list = list(order_map.values())
+    # Sort: newest first (PENDING at top, then by createdAt desc)
+    def sort_key(o):
+        status_priority = {"PENDING": 0, "PROCESSING": 1, "CONFIRMED": 2, "PENDING_RIDER_ACCEPT": 3}.get(o["status"], 10)
+        return (status_priority, -(len(str(o.get("createdAt", ""))) and hash(str(o.get("createdAt", "")))) or 0)
+
     orders_list.sort(key=lambda x: str(x.get("createdAt", "")), reverse=True)
 
     for o in orders_list:

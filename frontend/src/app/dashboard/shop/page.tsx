@@ -17,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-800 border-amber-200",
   PROCESSING: "bg-blue-50 text-blue-800 border-blue-200",
   CONFIRMED: "bg-indigo-50 text-indigo-800 border-indigo-200",
+  PENDING_RIDER_ACCEPT: "bg-amber-50 text-amber-700 border-amber-200",
   RIDER_ASSIGNED: "bg-sky-50 text-sky-800 border-sky-200",
   RIDER_AT_PHARMACY: "bg-teal-50 text-teal-800 border-teal-200",
   RIDER_PICKED_UP: "bg-teal-50 text-teal-800 border-teal-200",
@@ -978,6 +979,7 @@ export default function ShopDashboard() {
                     </div>
                     <p className="font-bold text-slate-900 text-base">{order.customer || "Customer"}</p>
                     <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-0.5"><MapPin size={12} className="text-slate-400" /> {order.customerAddress || "Local Delivery"}</p>
+                    {order.customerPhone && <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-0.5"><Phone size={11} className="text-slate-400" /> {order.customerPhone}</p>}
                     <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Clock size={11} /> {order.time || "Recent"}</p>
                   </div>
                   <div className="text-right">
@@ -989,14 +991,28 @@ export default function ShopDashboard() {
 
                 {/* Rider assignment & cancellation banner */}
                 <div className="mb-4 bg-[#F6FAF7] rounded-2xl p-4 border border-[#E2EFE7] text-xs">
-                  {order.riderName ? (
+                  {order.status === "PENDING_RIDER_ACCEPT" ? (
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" />
+                        <span className="font-bold text-amber-800">Awaiting rider acceptance</span>
+                        {order.riderName && <span className="text-slate-500 ml-1">→ {order.riderName}</span>}
+                      </div>
+                      <button
+                        onClick={() => setReassignModalOrder(order)}
+                        className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors uppercase tracking-wider"
+                      >
+                        <RefreshCw size={11} /> Reassign
+                      </button>
+                    </div>
+                  ) : order.riderName && order.status !== "PENDING_RIDER_ACCEPT" ? (
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <div className="flex items-center gap-2 text-slate-700">
                         <UserCheck size={16} className="text-[#1E3A2F]" />
                         <div>
-                          <span className="font-bold text-slate-900">Assigned Rider: {order.riderName}</span>
+                          <span className="font-bold text-slate-900">Rider: {order.riderName}</span>
                           {order.riderRating && <span className="text-amber-500 font-bold ml-2">⭐ {order.riderRating.toFixed(1)}</span>}
-                          {order.riderPhone && <span className="text-slate-500 ml-2">({order.riderPhone})</span>}
+                          {order.riderPhone && <span className="text-slate-500 ml-2 flex items-center gap-1 inline-flex"><Phone size={10}/> {order.riderPhone}</span>}
                         </div>
                       </div>
                       {order.status !== "DELIVERED" && (
@@ -1011,24 +1027,24 @@ export default function ShopDashboard() {
                   ) : order.cancelledRiderName ? (
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <div className="text-rose-600 font-medium">
-                        ⚠️ Order was released by previous rider <strong>({order.cancelledRiderName})</strong>.
+                        ⚠️ Rider <strong>{order.cancelledRiderName}</strong> rejected/released this order.
                       </div>
                       <button
                         onClick={() => setReassignModalOrder(order)}
                         className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                       >
-                        <UserCheck size={11} /> Reassign Rider
+                        <UserCheck size={11} /> Assign Another Rider
                       </button>
                     </div>
                   ) : (
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                      <span className="text-slate-500 font-medium">Available to all active nearby riders</span>
+                      <span className="text-slate-500 font-medium">No rider assigned yet</span>
                       {order.status !== "DELIVERED" && (
                         <button
                           onClick={() => setReassignModalOrder(order)}
                           className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                         >
-                          <UserCheck size={11} /> Directly Assign Rider
+                          <UserCheck size={11} /> Assign Rider
                         </button>
                       )}
                     </div>
@@ -1069,7 +1085,8 @@ export default function ShopDashboard() {
                     <div className="flex items-center justify-between w-full group">
                       <div className="flex items-center gap-2 px-4 py-2 bg-[#E8F3ED] text-[#1E3A2F] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#D5E6DC]">
                         <Navigation size={12} className="animate-pulse" />
-                        {order.status === "CONFIRMED" && "Awaiting Rider Acceptance"}
+                        {order.status === "CONFIRMED" && "Packed — Open for Riders"}
+                        {order.status === "PENDING_RIDER_ACCEPT" && "Awaiting Rider Acceptance"}
                         {order.status === "RIDER_ASSIGNED" && "Rider Heading to Store"}
                         {order.status === "RIDER_AT_PHARMACY" && "Rider at your Store"}
                         {order.status === "RIDER_PICKED_UP" && "Rider Picked Up Order"}
@@ -1396,24 +1413,32 @@ export default function ShopDashboard() {
                 <p className="text-center text-xs text-slate-400 py-6">No riders registered in database.</p>
               ) : (
                 riders.map(r => (
-                  <div key={r.id} className="p-4 rounded-2xl border border-[#E2EFE7] hover:bg-[#F6FAF7] transition-all flex justify-between items-center">
+                  <div key={r.id} className={`p-4 rounded-2xl border transition-all flex justify-between items-center ${r.isBusy ? "border-slate-200 bg-slate-50 opacity-70" : "border-[#E2EFE7] hover:bg-[#F6FAF7]"}`}>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-sm">{r.name || r.email}</span>
                         <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full flex items-center gap-0.5">
                           <Star size={10} fill="currentColor" /> {r.riderRating?.toFixed(1) || "5.0"}
                         </span>
+                        {r.isAvailable ? (
+                          <span className="text-[10px] font-black bg-[#E8F3ED] text-[#1E3A2F] px-2 py-0.5 rounded-full">✓ Available</span>
+                        ) : (
+                          <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">⏳ Busy</span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                        Vehicle: {r.vehicleType || "Motorcycle"} • Delivered: {r.completedDeliveries || 0}
+                        {r.vehicleType || "Motorcycle"} • {r.completedDeliveries || 0} deliveries{r.phone ? ` • ${r.phone}` : ""}
                       </p>
                     </div>
                     <button
                       onClick={() => handleReassignRider(reassignModalOrder.realId || reassignModalOrder.id, r.id)}
-                      disabled={reassigning}
-                      className="bg-[#1E3A2F] hover:bg-[#152a22] text-white text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50 uppercase tracking-wider"
+                      disabled={reassigning || r.isBusy}
+                      title={r.isBusy ? "Rider is currently busy with another delivery" : "Assign this rider"}
+                      className={`text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider ${
+                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white disabled:opacity-50"
+                      }`}
                     >
-                      {reassigning ? "Assigning..." : "Assign"}
+                      {reassigning ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
                     </button>
                   </div>
                 ))
