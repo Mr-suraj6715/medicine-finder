@@ -25,6 +25,28 @@ const STATUS_COLORS: Record<string, string> = {
   DELIVERED: "bg-[#E8F3ED] text-[#1E3A2F] border-[#CDE3D5]",
 };
 
+function formatApiError(detail: any, fallback: string = "Request failed"): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: any) => {
+        if (typeof item === "string") return item;
+        if (item && item.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+          const cleanMsg = item.msg.replace(/^Value error,\s*/i, "");
+          return field && field !== "body" ? `${field}: ${cleanMsg}` : cleanMsg;
+        }
+        return JSON.stringify(item);
+      })
+      .join(". ");
+  }
+  if (typeof detail === "object") {
+    return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title: string; zoom: number }) {
   const [icon, setIcon] = useState<any>(null);
   useEffect(() => {
@@ -466,6 +488,7 @@ export default function UserDashboard() {
     phone: "",
     houseNumber: "",
     street: "",
+    area: "",
     landmark: "",
     city: "Mumbai",
     state: "Maharashtra",
@@ -499,6 +522,7 @@ export default function UserDashboard() {
       phone: user?.phone || "",
       houseNumber: "",
       street: "",
+      area: "",
       landmark: "",
       city: "Mumbai",
       state: "Maharashtra",
@@ -515,10 +539,8 @@ export default function UserDashboard() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+    const rawPhone = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+    const cleanPhone = rawPhone.startsWith("+91") ? rawPhone.slice(3) : rawPhone.startsWith("91") && rawPhone.length === 12 ? rawPhone.slice(2) : rawPhone.startsWith("0") && rawPhone.length === 11 ? rawPhone.slice(1) : rawPhone;
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
@@ -564,10 +586,8 @@ export default function UserDashboard() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const rawPhone2 = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+      const cleanPhone = rawPhone2.startsWith("+91") ? rawPhone2.slice(3) : rawPhone2.startsWith("91") && rawPhone2.length === 12 ? rawPhone2.slice(2) : rawPhone2.startsWith("0") && rawPhone2.length === 11 ? rawPhone2.slice(1) : rawPhone2;
       const parts = [
         addressForm.houseNumber.trim(),
         addressForm.street.trim(),
@@ -583,6 +603,7 @@ export default function UserDashboard() {
         phone: cleanPhone,
         houseNumber: addressForm.houseNumber.trim(),
         street: addressForm.street.trim(),
+        area: addressForm.area ? addressForm.area.trim() : null,
         landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
@@ -633,6 +654,7 @@ export default function UserDashboard() {
       phone: addr.phone || "",
       houseNumber: addr.houseNumber || "",
       street: addr.street || "",
+      area: addr.area || "",
       landmark: addr.landmark || "",
       city: addr.city || "",
       state: addr.state || "",
@@ -674,6 +696,8 @@ export default function UserDashboard() {
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
   const [isTrackingMode, setIsTrackingMode] = useState(false);
 
+  const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
+
   useEffect(() => {
     const u = getStoredUser();
 
@@ -683,7 +707,8 @@ export default function UserDashboard() {
     }
 
     if (u.role !== "user") {
-      window.location.replace(getDashboardUrl(u.role));
+      setRoleMismatchUser(u as any);
+      setAuthLoading(false);
       return;
     }
 
@@ -741,6 +766,41 @@ export default function UserDashboard() {
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);
   const deliveredCount = orders.filter(o => o.status === "DELIVERED").length;
 
+  if (roleMismatchUser) {
+    return (
+      <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-emerald-50 text-[#1E3A2F] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#CDE3D5]">
+            <User size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Customer Account Required</h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong>{roleMismatchUser.email}</strong> ({roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner" : "Delivery Rider"}). To access the Customer Portal, please sign in with a Customer account.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                window.location.replace(getDashboardUrl(roleMismatchUser.role));
+              }}
+              className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+            >
+              Go to {roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner Dashboard" : "Rider Dashboard"}
+            </button>
+            <button
+              onClick={() => {
+                clearAuthSession();
+                window.location.replace("/?auth=login&role=user");
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+            >
+              Sign In with Customer Account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading || !user) return (
     <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
       <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
@@ -764,7 +824,10 @@ export default function UserDashboard() {
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Customer Portal</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <a href="/dashboard/shop" className="hidden sm:flex items-center gap-1.5 text-[#1E3A2F] hover:bg-[#E8F3ED] text-xs font-bold px-3 py-2 rounded-full border border-[#D5E6DC] transition-colors">
+              <Store size={14} /> Shop Owner Portal
+            </a>
             <div className="flex items-center gap-2 bg-[#F0F6F2] border border-[#D5E6DC] px-4 py-2 rounded-full text-xs">
               <Award size={15} className="text-[#1E3A2F]" />
               <span className="font-black text-[#1E3A2F]">{loyaltyPoints} Loyalty Pts</span>
@@ -1052,6 +1115,12 @@ export default function UserDashboard() {
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
                 <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g., MG Road, Andheri West" />
                 {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Area / Locality (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Area / Locality <span className="text-slate-400">(Optional)</span></label>
+                <input value={addressForm.area} onChange={e => setAddressForm(p => ({ ...p, area: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="e.g. Andheri East, Bandra West" />
               </div>
 
               {/* Landmark (optional) */}

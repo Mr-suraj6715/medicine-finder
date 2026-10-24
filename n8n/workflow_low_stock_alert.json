@@ -1,0 +1,60 @@
+{
+  "name": "MediFind – Low Stock Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/low_stock/alert",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-low-stock",
+      "name": "Webhook: low_stock.alert",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-low-stock-alert"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst data = payload.data || payload;\n\nconst urgencyEmoji = {\n  'critical': '🔴 CRITICAL',\n  'low': '🟠 LOW',\n  'warning': '🟡 WARNING'\n}[data.urgency] || '⚠️';\n\nreturn [{\n  json: {\n    subject: `${urgencyEmoji} – Low Stock: ${data.medicineName} at ${data.pharmacyName}`,\n    body: `Low inventory alert from MediFind.\\n\\n` +\n          `Medicine: ${data.medicineName}\\n` +\n          `Pharmacy: ${data.pharmacyName} (ID: ${data.pharmacyId})\\n` +\n          `Current Stock: ${data.currentStock} units\\n` +\n          `Threshold: ${data.threshold} units\\n` +\n          `Urgency: ${data.urgency?.toUpperCase() || 'WARNING'}\\n\\n` +\n          `⚡ Please restock this medicine immediately to avoid service disruption.\\n\\n` +\n          `Triggered at: ${payload.timestamp}`,\n    urgency: data.urgency,\n    medicineName: data.medicineName,\n    pharmacyName: data.pharmacyName,\n    currentStock: data.currentStock,\n    isCritical: data.urgency === 'critical'\n  }\n}];\n"
+      },
+      "id": "code-format-stock",
+      "name": "Format Stock Alert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"low_stock.alert\"}"
+      },
+      "id": "respond-stock",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: low_stock.alert": {
+      "main": [
+        [
+          {"node": "Format Stock Alert", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-low-stock",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "inventory"]
+}

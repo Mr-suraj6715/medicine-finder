@@ -96,6 +96,7 @@ class Address(Base):
     phone = Column(String, nullable=True)
     houseNumber = Column(String, nullable=True)
     street = Column(String, nullable=True)
+    area = Column(String, nullable=True)
     landmark = Column(String, nullable=True)
     city = Column(String, nullable=True)
     state = Column(String, nullable=True)

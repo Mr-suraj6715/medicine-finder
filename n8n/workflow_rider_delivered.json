@@ -1,0 +1,60 @@
+{
+  "name": "MediFind – Order Delivered (Loyalty & Feedback)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/rider/delivered",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-rider-delivered",
+      "name": "Webhook: rider.delivered",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-rider-delivered"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst data = payload.data || payload;\n\nreturn [{\n  json: {\n    subject: `🎉 Order Delivered! #${data.trackingNumber}`,\n    customerNotification: {\n      title: 'Order Delivered Successfully!',\n      message: `Your medicine order #${data.trackingNumber} has been delivered by ${data.riderName || 'your rider'}. You earned ${data.loyaltyEarned || 0} loyalty points!`,\n      recipientEmail: data.userEmail,\n      recipientName: data.userName,\n      loyaltyEarned: data.loyaltyEarned || 0,\n      totalAmount: data.totalAmount || 0\n    },\n    body: `Order ${data.trackingNumber} has been marked as DELIVERED.\\n\\n` +\n          `Customer: ${data.userName || 'N/A'} (${data.userEmail || 'N/A'})\\n` +\n          `Delivered by: ${data.riderName || 'Rider'} (ID: ${data.riderId})\\n` +\n          `Total Amount: ₹${data.totalAmount?.toFixed(2) || '0.00'}\\n` +\n          `Loyalty Points Awarded: ${data.loyaltyEarned || 0}\\n\\n` +\n          `Delivered at: ${payload.timestamp || new Date().toISOString()}`,\n    orderId: data.orderId,\n    trackingNumber: data.trackingNumber,\n    riderId: data.riderId,\n    userEmail: data.userEmail,\n    totalAmount: data.totalAmount,\n    loyaltyEarned: data.loyaltyEarned\n  }\n}];\n"
+      },
+      "id": "code-format-delivered",
+      "name": "Format Delivery Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"rider.delivered\"}"
+      },
+      "id": "respond-rider-delivered",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: rider.delivered": {
+      "main": [
+        [
+          {"node": "Format Delivery Data", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-rider-delivered",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "rider", "delivery", "loyalty"]
+}

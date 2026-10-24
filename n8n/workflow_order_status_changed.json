@@ -1,0 +1,60 @@
+{
+  "name": "MediFind – Order Status Changed",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/order/status_changed",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-status-changed",
+      "name": "Webhook: order.status_changed",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-order-status-changed"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst data = payload.data || payload;\n\nconst statusEmoji = {\n  'CONFIRMED': '✅',\n  'PROCESSING': '⚙️',\n  'RIDER_ASSIGNED': '🏍️',\n  'RIDER_AT_PHARMACY': '💊',\n  'RIDER_PICKED_UP': '📦',\n  'OUT_FOR_DELIVERY': '🚴',\n  'DELIVERED': '🎉',\n  'FAILED': '❌',\n  'CANCELLED': '🚫',\n};\n\nconst emoji = statusEmoji[data.newStatus] || '📋';\n\nreturn [{\n  json: {\n    subject: `${emoji} Order ${data.trackingNumber} → ${data.newStatus}`,\n    body: `Order status update for MediFind.\\n\\n` +\n          `Tracking: ${data.trackingNumber}\\n` +\n          `Status: ${data.previousStatus} → ${data.newStatus}\\n` +\n          `Customer: ${data.userName || 'N/A'} (${data.userEmail || 'N/A'})\\n` +\n          `Rider: ${data.riderName || 'Not assigned'} (${data.riderEmail || 'N/A'})\\n` +\n          `Pharmacy: ${data.pharmacyName || 'N/A'}\\n` +\n          `Delivery To: ${data.deliveryAddress || 'N/A'}\\n\\n` +\n          `Updated at: ${payload.timestamp}`,\n    ...data,\n    isDelivered: data.newStatus === 'DELIVERED',\n    isAssigned: data.newStatus === 'RIDER_ASSIGNED',\n  }\n}];\n"
+      },
+      "id": "code-format-status",
+      "name": "Format Status Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"order.status_changed\"}"
+      },
+      "id": "respond-status",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: order.status_changed": {
+      "main": [
+        [
+          {"node": "Format Status Data", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-order-status-changed",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "orders"]
+}

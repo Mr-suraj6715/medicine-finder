@@ -3,9 +3,12 @@ import sys
 from sqlalchemy import text
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from database import engine
+from database import engine, Base
+import models
 
 def migrate():
+    print("Ensuring database tables exist...")
+    Base.metadata.create_all(bind=engine)
     print("Running database column migrations...")
     with engine.connect() as conn:
         # Address table columns
@@ -14,6 +17,7 @@ def migrate():
             ('phone', 'VARCHAR'),
             ('houseNumber', 'VARCHAR'),
             ('street', 'VARCHAR'),
+            ('area', 'VARCHAR'),
             ('landmark', 'VARCHAR'),
             ('city', 'VARCHAR'),
             ('state', 'VARCHAR'),
@@ -28,7 +32,7 @@ def migrate():
         for col_name, col_type in address_columns:
             try:
                 conn.execute(text(f'ALTER TABLE "Address" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'))
-                print(f"✓ Ensured Address.{col_name}")
+                print(f"[OK] Ensured Address.{col_name}")
             except Exception as e:
                 print(f"Note on Address.{col_name}: {e}")
 
@@ -50,7 +54,7 @@ def migrate():
         for col_name, col_type in user_columns:
             try:
                 conn.execute(text(f'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'))
-                print(f"✓ Ensured User.{col_name}")
+                print(f"[OK] Ensured User.{col_name}")
             except Exception as e:
                 print(f"Note on User.{col_name}: {e}")
 
@@ -82,7 +86,7 @@ def migrate():
         for col_name, col_type in order_columns:
             try:
                 conn.execute(text(f'ALTER TABLE "Order" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'))
-                print(f"✓ Ensured Order.{col_name}")
+                print(f"[OK] Ensured Order.{col_name}")
             except Exception as e:
                 print(f"Note on Order.{col_name}: {e}")
 
@@ -101,7 +105,7 @@ def migrate():
         for col_name, col_type in inv_columns:
             try:
                 conn.execute(text(f'ALTER TABLE "Inventory" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'))
-                print(f"✓ Ensured Inventory.{col_name}")
+                print(f"[OK] Ensured Inventory.{col_name}")
             except Exception as e:
                 print(f"Note on Inventory.{col_name}: {e}")
 
@@ -116,12 +120,12 @@ def migrate():
         for col_name, col_type in med_columns:
             try:
                 conn.execute(text(f'ALTER TABLE "Medicine" ADD COLUMN IF NOT EXISTS "{col_name}" {col_type};'))
-                print(f"✓ Ensured Medicine.{col_name}")
+                print(f"[OK] Ensured Medicine.{col_name}")
             except Exception as e:
                 print(f"Note on Medicine.{col_name}: {e}")
 
         conn.commit()
-        print("✓ All database migrations applied successfully!")
+        print("[OK] All database migrations applied successfully!")
 
 if __name__ == "__main__":
     migrate()

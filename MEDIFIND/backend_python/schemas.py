@@ -5,7 +5,7 @@ import re
 class LoginRequest(BaseModel):
     email: str = Field(..., max_length=255)
     password: str = Field(..., max_length=128)
-    role: Optional[str] = "user"
+    role: Optional[str] = None
 
     @validator("email")
     def validate_email(cls, v):
@@ -19,7 +19,7 @@ class SignupRequest(BaseModel):
     email: str = Field(..., max_length=255)
     password: str = Field(..., min_length=6, max_length=128)
     role: Optional[str] = "user"
-    phone: Optional[str] = Field(None, max_length=20)
+    phone: Optional[str] = Field(None, max_length=25)
     location: Optional[str] = Field(None, max_length=255)
 
     @validator("email")
@@ -29,149 +29,96 @@ class SignupRequest(BaseModel):
             raise ValueError("Invalid email format")
         return v.strip().lower()
 
+    @validator("role")
+    def validate_role(cls, v):
+        if not v:
+            return "user"
+        normalized = v.strip().lower()
+        if normalized in ["user", "customer"]:
+            return "user"
+        if normalized == "shop_owner":
+            return "shop_owner"
+        if normalized == "rider":
+            return "rider"
+        raise ValueError("Invalid role specified. Allowed roles: Customer, Shop Owner, Rider")
+
 class AddressCreate(BaseModel):
-    userId: str = Field(..., max_length=128)
+    userId: Optional[str] = Field(None, max_length=128)
     label: str = Field("Home", max_length=50)
-    fullName: Optional[str] = Field("Customer", min_length=2, max_length=100)
-    phone: Optional[str] = Field("9820000000", min_length=10, max_length=20)
-    houseNumber: Optional[str] = Field("1", min_length=1, max_length=100)
-    street: Optional[str] = Field("Main Road", min_length=2, max_length=255)
-    landmark: Optional[str] = Field(None, max_length=255)
-    city: str = Field("Mumbai", min_length=2, max_length=100)
-    state: str = Field("Maharashtra", min_length=2, max_length=100)
-    pincode: str = Field("400001", min_length=6, max_length=10)
-    address: Optional[str] = Field(None, max_length=500)
-    shippingAddress: Optional[str] = Field(None, max_length=500)
-    deliveryAddress: Optional[str] = Field(None, max_length=500)
+    fullName: str = Field(..., min_length=2, max_length=100)
+    phone: str = Field(..., min_length=10, max_length=25)
+    houseNumber: str = Field(..., min_length=1, max_length=100)
+    street: str = Field(..., min_length=1, max_length=200)
+    area: Optional[str] = Field(None, max_length=200)
+    landmark: Optional[str] = Field(None, max_length=200)
+    city: str = Field(..., min_length=2, max_length=100)
+    state: str = Field(..., min_length=2, max_length=100)
+    pincode: str = Field(..., min_length=5, max_length=10)
     isDefault: Optional[bool] = False
     latitude: Optional[float] = None
     longitude: Optional[float] = None
 
-    @root_validator(pre=True)
-    def handle_address_fields(cls, values):
-        if not isinstance(values, dict):
-            return values
-
-        if not values.get("fullName"):
-            values["fullName"] = "Customer"
-        if not values.get("phone"):
-            values["phone"] = "9820000000"
-        if not values.get("houseNumber"):
-            values["houseNumber"] = "1"
-        if not values.get("street"):
-            values["street"] = "Main Road"
-        if not values.get("pincode"):
-            values["pincode"] = "400001"
-
-        # Handle field mismatches or objects sent where string expected
-        raw_addr = values.get("address") or values.get("deliveryAddress") or values.get("shippingAddress")
-        if isinstance(raw_addr, dict):
-            for k, v in raw_addr.items():
-                if k not in values or not values[k]:
-                    values[k] = v
-            raw_addr = None
-
-        if raw_addr and isinstance(raw_addr, str):
-            clean_raw = raw_addr.strip()
-            values["address"] = clean_raw
-            if not values.get("houseNumber"):
-                parts = [p.strip() for p in clean_raw.split(",") if p.strip()]
-                values["houseNumber"] = parts[0] if parts else clean_raw[:50]
-            if not values.get("street"):
-                parts = [p.strip() for p in clean_raw.split(",") if p.strip()]
-                values["street"] = ", ".join(parts[1:]) if len(parts) > 1 else clean_raw[:150]
-            if not values.get("pincode"):
-                pin_match = re.search(r"\b([1-9][0-9]{5})\b", clean_raw)
-                values["pincode"] = pin_match.group(1) if pin_match else "400001"
-            if not values.get("city"):
-                values["city"] = "Mumbai"
-            if not values.get("state"):
-                values["state"] = "Maharashtra"
-
-        # Auto-compute combined address if houseNumber and street exist
-        if values.get("houseNumber") and values.get("street") and not values.get("address"):
-            parts = [
-                str(values.get(k)).strip()
-                for k in ["houseNumber", "street", "landmark", "city", "state", "pincode"]
-                if values.get(k) and str(values.get(k)).strip()
-            ]
-            values["address"] = ", ".join(parts)
-
-        # Phone cleaning and normalization
-        phone = values.get("phone")
-        if phone and isinstance(phone, str):
-            cleaned = re.sub(r"[\s\-\(\)\+]", "", phone)
-            if len(cleaned) == 12 and cleaned.startswith("91"):
-                cleaned = cleaned[2:]
-            elif len(cleaned) == 13 and cleaned.startswith("091"):
-                cleaned = cleaned[3:]
-            elif len(cleaned) == 11 and cleaned.startswith("0"):
-                cleaned = cleaned[1:]
-            values["phone"] = cleaned
-
-        return values
-
-    @validator("phone")
+    @validator("phone", pre=True)
     def validate_phone(cls, v):
-        cleaned = re.sub(r"[\s\-\(\)\+]", "", v)
-        if len(cleaned) == 12 and cleaned.startswith("91"):
-            cleaned = cleaned[2:]
-        elif len(cleaned) == 13 and cleaned.startswith("091"):
-            cleaned = cleaned[3:]
-        elif len(cleaned) == 11 and cleaned.startswith("0"):
-            cleaned = cleaned[1:]
-        if not re.match(r"^[6-9]\d{9}$", cleaned):
-            raise ValueError("Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)")
+        if not v or not str(v).strip():
+            raise ValueError("Phone number is required")
+        cleaned = re.sub(r"[\s\-\(\)]", "", str(v).strip())
+        digits_only = re.sub(r"^\+91|^91|^0", "", cleaned) if cleaned.startswith(("+91", "91", "0")) and len(re.sub(r"\D", "", cleaned)) > 10 else re.sub(r"\D", "", cleaned)
+        if len(digits_only) == 10 and re.match(r"^[6-9]\d{9}$", digits_only):
+            return digits_only
+        all_digits = re.sub(r"\D", "", cleaned)
+        if len(all_digits) < 10 or len(all_digits) > 15:
+            raise ValueError("Enter a valid mobile phone number (10 digits)")
         return cleaned
 
-    @validator("pincode")
+    @validator("pincode", pre=True)
     def validate_pincode(cls, v):
-        cleaned = re.sub(r"\s+", "", v)
+        if not v or not str(v).strip():
+            raise ValueError("PIN code is required")
+        cleaned = re.sub(r"\s+", "", str(v).strip())
         if not re.match(r"^[1-9][0-9]{5}$", cleaned):
-            raise ValueError("Enter a valid 6-digit Indian PIN code")
+            raise ValueError("PIN code must contain 6 digits (e.g. 400069)")
         return cleaned
 
-    @validator("fullName")
+    @validator("fullName", pre=True)
     def validate_name(cls, v):
-        v = v.strip()
-        if not re.match(r"^[A-Za-z\s\.\-\']+$", v):
-            raise ValueError("Full Name must contain only letters, dots, hyphens, and spaces")
-        if len(v) < 2:
+        if not v or not str(v).strip():
+            raise ValueError("Full Name is required")
+        cleaned = str(v).strip()
+        if len(cleaned) < 2:
             raise ValueError("Full Name is too short (min 2 characters)")
-        return v
+        return cleaned
 
-    @validator("city", "state")
-    def validate_city_state(cls, v):
-        v = v.strip()
-        if not re.match(r"^[A-Za-z0-9\s\.\-\',()]+$", v):
-            raise ValueError("Must contain valid letters and characters")
-        if len(v) < 2:
-            raise ValueError("Value is too short (min 2 characters)")
-        return v
-
-    @validator("houseNumber", "street")
-    def validate_address_fields(cls, v):
-        v = str(v).strip()
-        if len(v) < 1:
+    @validator("houseNumber", "street", "city", "state", pre=True)
+    def validate_required_address_fields(cls, v):
+        if not v or not str(v).strip():
             raise ValueError("Field cannot be empty")
-        if len(v) > 255:
-            raise ValueError("Field is too long")
-        return v
+        cleaned = str(v).strip()
+        if len(cleaned) < 1:
+            raise ValueError("Field cannot be empty")
+        return cleaned
+
+    @validator("area", "landmark", pre=True)
+    def validate_optional_address_fields(cls, v):
+        if v is None:
+            return None
+        cleaned = str(v).strip()
+        if not cleaned:
+            return None
+        return cleaned
 
 
 class AddressUpdate(BaseModel):
     label: Optional[str] = Field(None, max_length=50)
     fullName: Optional[str] = Field(None, min_length=2, max_length=100)
-    phone: Optional[str] = Field(None, min_length=10, max_length=20)
+    phone: Optional[str] = Field(None, min_length=10, max_length=25)
     houseNumber: Optional[str] = Field(None, min_length=1, max_length=100)
-    street: Optional[str] = Field(None, min_length=2, max_length=255)
-    landmark: Optional[str] = Field(None, max_length=255)
+    street: Optional[str] = Field(None, min_length=1, max_length=200)
+    area: Optional[str] = Field(None, max_length=200)
+    landmark: Optional[str] = Field(None, max_length=200)
     city: Optional[str] = Field(None, min_length=2, max_length=100)
     state: Optional[str] = Field(None, min_length=2, max_length=100)
-    pincode: Optional[str] = Field(None, min_length=6, max_length=10)
-    address: Optional[str] = Field(None, max_length=500)
-    shippingAddress: Optional[str] = Field(None, max_length=500)
-    deliveryAddress: Optional[str] = Field(None, max_length=500)
+    pincode: Optional[str] = Field(None, min_length=5, max_length=10)
     isDefault: Optional[bool] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
@@ -201,24 +148,31 @@ class AddressUpdate(BaseModel):
     def validate_phone(cls, v):
         if v is None:
             return v
-        cleaned = re.sub(r"[\s\-\(\)\+]", "", v)
-        if len(cleaned) == 12 and cleaned.startswith("91"):
-            cleaned = cleaned[2:]
-        elif len(cleaned) == 13 and cleaned.startswith("091"):
-            cleaned = cleaned[3:]
-        elif len(cleaned) == 11 and cleaned.startswith("0"):
-            cleaned = cleaned[1:]
-        if not re.match(r"^[6-9]\d{9}$", cleaned):
-            raise ValueError("Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)")
+        cleaned = re.sub(r"[\s\-\(\)]", "", str(v).strip())
+        digits_only = re.sub(r"^\+91|^91|^0", "", cleaned) if cleaned.startswith(("+91", "91", "0")) and len(re.sub(r"\D", "", cleaned)) > 10 else re.sub(r"\D", "", cleaned)
+        if len(digits_only) == 10 and re.match(r"^[6-9]\d{9}$", digits_only):
+            return digits_only
+        all_digits = re.sub(r"\D", "", cleaned)
+        if len(all_digits) < 10 or len(all_digits) > 15:
+            raise ValueError("Enter a valid mobile phone number (10 digits)")
         return cleaned
 
     @validator("pincode", pre=True, always=False)
     def validate_pincode(cls, v):
         if v is None:
             return v
-        cleaned = re.sub(r"\s+", "", v)
+        cleaned = re.sub(r"\s+", "", str(v).strip())
         if not re.match(r"^[1-9][0-9]{5}$", cleaned):
-            raise ValueError("Enter a valid 6-digit Indian PIN code")
+            raise ValueError("PIN code must contain 6 digits (e.g. 400069)")
+        return cleaned
+
+    @validator("fullName", "houseNumber", "street", "area", "landmark", "city", "state", pre=True, always=False)
+    def validate_address_text(cls, v):
+        if v is None:
+            return v
+        cleaned = str(v).strip()
+        if not cleaned:
+            return None
         return cleaned
 
 

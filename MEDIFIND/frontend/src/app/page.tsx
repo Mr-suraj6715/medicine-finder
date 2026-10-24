@@ -126,6 +126,7 @@ interface UserAddress {
   phone: string | null;
   houseNumber: string | null;
   street: string | null;
+  area: string | null;
   landmark: string | null;
   city: string | null;
   state: string | null;
@@ -852,7 +853,7 @@ export default function Home() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingAddress, setEditingAddress] = useState<UserAddress | null>(null);
-  const [addressForm, setAddressForm] = useState({ label: "Home", fullName: "", phone: "", houseNumber: "", street: "", landmark: "", city: "", state: "", pincode: "", isDefault: false });
+  const [addressForm, setAddressForm] = useState({ label: "Home", fullName: "", phone: "", houseNumber: "", street: "", area: "", landmark: "", city: "", state: "", pincode: "", isDefault: false });
   const [addressSaving, setAddressSaving] = useState(false);
   const [addressFeedback, setAddressFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
@@ -953,6 +954,7 @@ export default function Home() {
       phone: user?.phone || "",
       houseNumber: "",
       street: "",
+      area: "",
       landmark: "",
       city: "Mumbai",
       state: "Maharashtra",
@@ -969,10 +971,8 @@ export default function Home() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+    const rawPhone = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+    const cleanPhone = rawPhone.startsWith("+91") ? rawPhone.slice(3) : rawPhone.startsWith("91") && rawPhone.length === 12 ? rawPhone.slice(2) : rawPhone.startsWith("0") && rawPhone.length === 11 ? rawPhone.slice(1) : rawPhone;
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
@@ -1022,10 +1022,8 @@ export default function Home() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const rawPhone2 = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+      const cleanPhone = rawPhone2.startsWith("+91") ? rawPhone2.slice(3) : rawPhone2.startsWith("91") && rawPhone2.length === 12 ? rawPhone2.slice(2) : rawPhone2.startsWith("0") && rawPhone2.length === 11 ? rawPhone2.slice(1) : rawPhone2;
       const parts = [
         addressForm.houseNumber.trim(),
         addressForm.street.trim(),
@@ -1041,6 +1039,7 @@ export default function Home() {
         phone: cleanPhone,
         houseNumber: addressForm.houseNumber.trim(),
         street: addressForm.street.trim(),
+        area: addressForm.area ? addressForm.area.trim() : null,
         landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
@@ -1102,6 +1101,7 @@ export default function Home() {
       phone: addr.phone || "",
       houseNumber: addr.houseNumber || "",
       street: addr.street || "",
+      area: addr.area || "",
       landmark: addr.landmark || "",
       city: addr.city || "",
       state: addr.state || "",
@@ -1144,6 +1144,19 @@ export default function Home() {
 
     const storedUser = getStoredUser();
     if (storedUser) {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const reqRole = params.get("role");
+        if (params.get("auth") === "login" && reqRole && reqRole !== storedUser.role) {
+          clearAuthSession();
+          setUser(null);
+          setAuthModalRole(reqRole as any);
+          setShowLogin(true);
+          setShowSignup(false);
+          setIsAuthChecking(false);
+          return;
+        }
+      }
       setUser(storedUser);
       if (storedUser.role === "shop_owner") {
         window.location.replace("/dashboard/shop");
@@ -1544,11 +1557,23 @@ export default function Home() {
                   {profileOpen && (
                     <>
                       <div className="fixed inset-0 z-[40]" onClick={() => setProfileOpen(false)}></div>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-52 z-[50] animate-in fade-in zoom-in-95 duration-200">
-                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-slate-700 font-bold">
-                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} Dashboard
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-60 z-[50] animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-4 py-2 border-b border-slate-100">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Signed in as</p>
+                          <p className="text-xs font-bold text-slate-800 truncate">{user.email}</p>
+                          <span className="inline-block mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#E8F3ED] text-[#1E3A2F]">
+                            {user.role === "shop_owner" ? "Medical Shop Owner" : user.role === "rider" ? "Delivery Rider" : "Customer"}
+                          </span>
+                        </div>
+                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 font-bold">
+                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} My Dashboard
                         </a>
-                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-rose-600 w-full text-left font-bold">
+                        {user.role !== "shop_owner" && (
+                          <a href="/dashboard/shop" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-emerald-50 text-[#1E3A2F] font-bold">
+                            <Store size={15} /> Shop Owner Portal
+                          </a>
+                        )}
+                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-rose-50 text-rose-600 w-full text-left font-bold border-t border-slate-100 mt-1">
                           <LogOut size={15} /> Sign out
                         </button>
                       </div>
@@ -2433,6 +2458,12 @@ export default function Home() {
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
                 <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? 'border-rose-400' : 'border-slate-200'}`} placeholder="e.g., MG Road, Andheri West" />
                 {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Area / Locality (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Area / Locality <span className="text-slate-300">(Optional)</span></label>
+                <input value={addressForm.area} onChange={e => setAddressForm(p => ({ ...p, area: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="e.g. Andheri East, Bandra West" />
               </div>
 
               {/* Landmark (optional) */}

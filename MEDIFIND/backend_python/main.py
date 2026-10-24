@@ -53,6 +53,7 @@ async def enforce_utf8_charset(request, call_next):
 # Register routers
 app.include_router(auth_router.router)
 app.include_router(user_router.router)
+app.include_router(user_router.addresses_router)
 app.include_router(orders_router.router)
 app.include_router(rider_router.router)
 app.include_router(shop_router.router)

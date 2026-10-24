@@ -1,0 +1,82 @@
+{
+  "name": "MediFind – User Registered (Onboarding & CRM)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "medifind/user/registered",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-user-registered",
+      "name": "Webhook: user.registered",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "medifind-user-registered"
+    },
+    {
+      "parameters": {
+        "jsCode": "const payload = $input.first().json;\nconst data = payload.data || payload;\n\nconst roleTitles = {\n  'user': 'Customer 👤',\n  'shop_owner': 'Medical Shop Owner 🏥',\n  'rider': 'Delivery Rider 🏍️'\n};\n\nconst title = roleTitles[data.role] || data.roleDisplay || 'User';\n\nreturn [{\n  json: {\n    subject: `🎉 Welcome to MediFind, ${data.name || 'Friend'}! (${title})`,\n    body: `New user registration on MediFind.\\n\\n` +\n          `Name: ${data.name || 'N/A'}\\n` +\n          `Email: ${data.email}\\n` +\n          `Account Type: ${title}\\n` +\n          `User ID: ${data.userId}\\n\\n` +\n          `Registered at: ${payload.timestamp || new Date().toISOString()}`,\n    userId: data.userId,\n    email: data.email,\n    name: data.name,\n    role: data.role,\n    isRider: data.role === 'rider',\n    isShopOwner: data.role === 'shop_owner',\n    isCustomer: data.role === 'user'\n  }\n}];\n"
+      },
+      "id": "code-format-user",
+      "name": "Format User Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.role }}",
+              "value2": "shop_owner"
+            }
+          ]
+        }
+      },
+      "id": "if-shop-owner",
+      "name": "Is Shop Owner?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\"received\": true, \"event\": \"user.registered\"}"
+      },
+      "id": "respond-user",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [480, 500]
+    }
+  ],
+  "connections": {
+    "Webhook: user.registered": {
+      "main": [
+        [
+          {"node": "Format User Data", "type": "main", "index": 0},
+          {"node": "Respond OK", "type": "main", "index": 0}
+        ]
+      ]
+    },
+    "Format User Data": {
+      "main": [
+        [{"node": "Is Shop Owner?", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1.0.0",
+  "meta": {
+    "templateId": "medifind-user-registered",
+    "instanceId": "medifind"
+  },
+  "tags": ["medifind", "auth", "crm"]
+}
