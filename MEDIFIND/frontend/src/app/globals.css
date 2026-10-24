@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  --font-sans: "Arial", "Helvetica", sans-serif;
   --color-primary: #0ea5e9;
   --color-primary-dark: #0284c7;
   --color-primary-light: #e0f2fe;
@@ -14,7 +15,7 @@
 body {
   background: var(--color-background);
   color: var(--color-foreground);
-  font-family: inherit;
+  font-family: "Arial", "Helvetica", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

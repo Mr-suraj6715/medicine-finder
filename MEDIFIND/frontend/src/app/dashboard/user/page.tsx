@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   HeartPulse, ShoppingCart, Package, MapPin, Star, Pill, LogOut,
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
-  Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles
+  Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles, Truck, AlertCircle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
 
@@ -13,6 +13,7 @@ const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContai
 const TileLayer = dynamic(() => import("react-leaflet").then(m => m.TileLayer), { ssr: false });
 const Marker = dynamic(() => import("react-leaflet").then(m => m.Marker), { ssr: false });
 const Popup = dynamic(() => import("react-leaflet").then(m => m.Popup), { ssr: false });
+const Polyline = dynamic(() => import("react-leaflet").then(m => m.Polyline), { ssr: false });
 
 const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-800 border-amber-200",
@@ -39,7 +40,10 @@ function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden">
       <MapContainer center={[lat, lng]} zoom={zoom} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
         <Marker position={[lat, lng]} icon={icon}><Popup>{title}</Popup></Marker>
       </MapContainer>
     </div>
@@ -91,7 +95,7 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xs font-black text-slate-800">×{item.quantity || item.qty || 1}</p>
-                    <p className="text-[11px] font-bold text-[#1E3A2F]">₹{((item.priceAtTime ?? item.price ?? 0) * (item.quantity || item.qty || 1)).toFixed(2)}</p>
+                    <p className="text-[11px] font-bold text-[#1E3A2F]">{(item.priceAtTime ?? item.price ?? 0) * (item.quantity || item.qty || 1)}</p>
                   </div>
                 </div>
               ))}
@@ -104,23 +108,23 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal</span>
-                <span>₹{((order.totalAmount || 0) - (order.surgeFee || 0) + (order.discountApplied || 0)).toFixed(2)}</span>
+                <span>{(order.totalAmount || 0) - (order.surgeFee || 0) + (order.discountApplied || 0)}</span>
               </div>
               {(order.discountApplied || 0) > 0 && (
                 <div className="flex justify-between text-emerald-700 font-medium">
                   <span className="flex items-center gap-1"><Gift size={12} /> Bulk Discount</span>
-                  <span>-₹{(order.discountApplied || 0).toFixed(2)}</span>
+                  <span>-{order.discountApplied || 0}</span>
                 </div>
               )}
               {order.isEmergency && (order.surgeFee || 0) > 0 && (
                 <div className="flex justify-between text-rose-500 font-medium">
                   <span>Emergency Surge Fee</span>
-                  <span>+₹{(order.surgeFee || 0).toFixed(2)}</span>
+                  <span>+{order.surgeFee || 0}</span>
                 </div>
               )}
               <div className="flex justify-between font-black text-base border-t border-[#D5E6DC] pt-2 mt-1">
                 <span>Total Paid</span>
-                <span className="text-[#1E3A2F]">₹{(order.totalAmount || 0).toFixed(2)}</span>
+                <span className="text-[#1E3A2F]">{order.totalAmount || 0}</span>
               </div>
             </div>
           </div>
@@ -197,10 +201,260 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
   );
 }
 
+// ── Live Tracking Map & Modal ───────────────────────────────────────
+function TrackingMap({ pharmacyCoord, customerCoord, riderCoord }: { pharmacyCoord: { lat: number; lng: number }; customerCoord: { lat: number; lng: number }; riderCoord?: { lat: number; lng: number } | null }) {
+  let L: any;
+  if (typeof window !== "undefined") {
+    try {
+      L = require("leaflet");
+    } catch {}
+  }
+
+  const shopIcon = typeof window !== "undefined" && L ? L.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const customerIcon = typeof window !== "undefined" && L ? L.icon({
+    iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-red.png",
+    shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41],
+  }) : undefined;
+
+  const riderIcon = typeof window !== "undefined" && L ? L.icon({
+    iconUrl: "https://cdn-icons-png.flaticon.com/512/2972/2972185.png",
+    iconSize: [35, 35], iconAnchor: [17, 35], popupAnchor: [0, -35]
+  }) : undefined;
+
+  const centerLat = riderCoord ? (riderCoord.lat + customerCoord.lat) / 2 : (pharmacyCoord.lat + customerCoord.lat) / 2;
+  const centerLng = riderCoord ? (riderCoord.lng + customerCoord.lng) / 2 : (pharmacyCoord.lng + customerCoord.lng) / 2;
+
+  return (
+    <div className="w-full h-64 sm:h-72 rounded-[24px] overflow-hidden border border-[#E2EFE7] shadow-inner relative z-0">
+      <MapContainer center={[centerLat, centerLng]} zoom={13} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+        />
+        <Marker position={[pharmacyCoord.lat, pharmacyCoord.lng]} icon={shopIcon}>
+          <Popup>Pharmacy Pickup</Popup>
+        </Marker>
+        <Marker position={[customerCoord.lat, customerCoord.lng]} icon={customerIcon}>
+          <Popup>Your Delivery Address</Popup>
+        </Marker>
+        {riderCoord && (
+          <Marker position={[riderCoord.lat, riderCoord.lng]} icon={riderIcon}>
+            <Popup>Delivery Partner Live Location</Popup>
+          </Marker>
+        )}
+        <Polyline
+          positions={[[pharmacyCoord.lat, pharmacyCoord.lng], [customerCoord.lat, customerCoord.lng]]}
+          pathOptions={{ color: '#1E3A2F', weight: 3, opacity: 0.5, dashArray: '6, 6' }}
+        />
+        {riderCoord && (
+          <Polyline
+            positions={[[riderCoord.lat, riderCoord.lng], [customerCoord.lat, customerCoord.lng]]}
+            pathOptions={{ color: '#059669', weight: 4, opacity: 0.8 }}
+          />
+        )}
+      </MapContainer>
+    </div>
+  );
+}
+
+function LiveTrackingModal({ order, onClose }: { order: any; onClose: () => void }) {
+  const pharmacyCoord = {
+    lat: order.pharmacy?.latitude || order.pharmacy?.lat || 19.0760,
+    lng: order.pharmacy?.longitude || order.pharmacy?.lng || 72.8777
+  };
+  const customerCoord = {
+    lat: order.deliveryLat || 19.0820,
+    lng: order.deliveryLng || 72.8810
+  };
+  const riderCoord = order.rider ? {
+    lat: order.rider?.latitude || order.rider?.lat || 19.0780,
+    lng: order.rider?.longitude || order.rider?.lng || 72.8790
+  } : null;
+
+  const steps = [
+    { label: "Order Placed", done: true },
+    { label: "Confirmed", done: ["CONFIRMED", "RIDER_ASSIGNED", "RIDER_AT_PHARMACY", "RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER", "DELIVERED"].includes(order.status) },
+    { label: "Rider Assigned", done: ["RIDER_ASSIGNED", "RIDER_AT_PHARMACY", "RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER", "DELIVERED"].includes(order.status) },
+    { label: "Out for Delivery", done: ["RIDER_PICKED_UP", "OUT_FOR_DELIVERY", "REACHED_CUSTOMER", "DELIVERED"].includes(order.status) },
+    { label: "Delivered", done: order.status === "DELIVERED" },
+  ];
+
+  const getStatusDisplay = () => {
+    switch (order.status) {
+      case "PENDING": return { title: "Order Placed", desc: "Waiting for pharmacy confirmation", badge: "bg-amber-50 text-amber-800" };
+      case "CONFIRMED": return { title: "Order Confirmed", desc: "Pharmacy is packing your medicines", badge: "bg-blue-50 text-blue-800" };
+      case "RIDER_ASSIGNED": return { title: "Delivery Partner Assigned", desc: `${order.rider?.name || 'Rider'} is heading to the pharmacy`, badge: "bg-sky-50 text-sky-800" };
+      case "RIDER_AT_PHARMACY": return { title: "Rider at Pharmacy", desc: "Verifying medicines and prescription", badge: "bg-teal-50 text-teal-800" };
+      case "RIDER_PICKED_UP": return { title: "Order Picked Up", desc: "On the way to your delivery address", badge: "bg-indigo-50 text-indigo-800" };
+      case "OUT_FOR_DELIVERY": return { title: "Out for Delivery", desc: "Rider is approaching your location", badge: "bg-purple-50 text-purple-800" };
+      case "REACHED_CUSTOMER": return { title: "Arrived at Your Location", desc: "Please collect your package", badge: "bg-pink-50 text-pink-800" };
+      case "DELIVERED": return { title: "Successfully Delivered", desc: "Package handed over safely", badge: "bg-emerald-50 text-emerald-800" };
+      default: return { title: order.status?.replace(/_/g, " "), desc: "Delivery in progress", badge: "bg-slate-100 text-slate-700" };
+    }
+  };
+
+  const statusInfo = getStatusDisplay();
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-white rounded-[32px] shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92vh] flex flex-col border border-slate-100 animate-in fade-in zoom-in-95 duration-200">
+        {/* Header */}
+        <div className="p-6 bg-[#1E3A2F] text-white flex justify-between items-start shrink-0">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Live Delivery Tracking</p>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black font-sans tracking-tight">{order.trackingNumber || order.id}</h2>
+            <p className="text-xs text-white/70 mt-0.5">Est. Delivery: <strong>Today, 30-45 mins</strong></p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Live Status Card */}
+          <div className="bg-[#F6FAF7] border border-[#E2EFE7] rounded-[24px] p-5">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <span className={`text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider ${statusInfo.badge}`}>
+                  {order.status?.replace(/_/g, " ")}
+                </span>
+                <h3 className="font-bold text-slate-900 text-base mt-2">{statusInfo.title}</h3>
+                <p className="text-xs text-slate-500 font-medium">{statusInfo.desc}</p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center shrink-0">
+                <Navigation size={22} className="animate-pulse" />
+              </div>
+            </div>
+
+            {/* Stepper */}
+            <div className="pt-2 border-t border-slate-200/60">
+              <div className="grid grid-cols-5 gap-1 text-center">
+                {steps.map((st, i) => (
+                  <div key={i} className="flex flex-col items-center">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                      st.done ? "bg-[#1E3A2F] text-white shadow" : "bg-slate-200 text-slate-400"
+                    }`}>
+                      {st.done ? "✓" : i + 1}
+                    </div>
+                    <span className={`text-[9px] font-bold mt-1.5 uppercase tracking-tighter leading-tight ${
+                      st.done ? "text-[#1E3A2F]" : "text-slate-400"
+                    }`}>
+                      {st.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Map */}
+          <div>
+            <div className="flex justify-between items-center mb-2 px-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Delivery Route</p>
+              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Live GPS Active
+              </span>
+            </div>
+            <TrackingMap pharmacyCoord={pharmacyCoord} customerCoord={customerCoord} riderCoord={riderCoord} />
+          </div>
+
+          {/* Rider & Pharmacy Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Rider Card */}
+            <div className="bg-white rounded-2xl p-4 border border-[#E2EFE7] shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Delivery Partner</p>
+              {order.rider ? (
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center font-bold font-sans text-lg">
+                      {order.rider.name?.[0]?.toUpperCase() || "R"}
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-sm">{order.rider.name || order.rider.email}</p>
+                      <p className="text-xs text-slate-500">{order.rider.vehicleType || "Motorcycle"} • ⭐ {(order.rider.rating || order.rider.riderRating || 5).toFixed(1)}</p>
+                    </div>
+                  </div>
+                  {order.rider.phone && (
+                    <a
+                      href={`tel:${order.rider.phone}`}
+                      className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center justify-center transition-colors"
+                      title="Call Rider"
+                    >
+                      <Phone size={15} />
+                    </a>
+                  )}
+                </div>
+              ) : (
+                <div className="py-2 text-center text-xs text-slate-400 font-medium">
+                  ⏳ Assigning nearby verified rider...
+                </div>
+              )}
+            </div>
+
+            {/* Pharmacy Card */}
+            <div className="bg-white rounded-2xl p-4 border border-[#E2EFE7] shadow-sm">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Pickup Pharmacy</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center">
+                    <Store size={20} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-bold text-slate-900 text-sm truncate">{order.pharmacy?.name || "Local Chemist"}</p>
+                    <p className="text-xs text-slate-500 truncate">{order.pharmacy?.location || "Mumbai, Maharashtra"}</p>
+                  </div>
+                </div>
+                {order.pharmacy?.phone && (
+                  <a
+                    href={`tel:${order.pharmacy.phone}`}
+                    className="w-9 h-9 rounded-xl bg-slate-50 text-slate-600 hover:bg-slate-100 flex items-center justify-center transition-colors"
+                    title="Call Pharmacy"
+                  >
+                    <Phone size={15} />
+                  </a>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Delivery Address */}
+          <div className="bg-[#F6FAF7] border border-[#E2EFE7] rounded-2xl p-4 flex items-start gap-3">
+            <MapPin size={18} className="text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Delivery Destination</p>
+              <p className="text-xs font-bold text-slate-800 mt-0.5">{order.deliveryAddress || "Home Address"}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-[#F6FAF7] border-t border-[#E2EFE7] shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow"
+          >
+            Close Tracking
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [tab, setTab] = useState<"orders" | "profile" | "health">("orders");
+  const [tab, setTab] = useState<"orders" | "profile">("orders");
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
@@ -261,9 +515,12 @@ export default function UserDashboard() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
-      errs.phone = "Enter a valid 10-digit Indian mobile number";
+      errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
     if (!addressForm.houseNumber.trim()) {
       errs.houseNumber = "House / Flat / Building is required";
@@ -307,7 +564,19 @@ export default function UserDashboard() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      const cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const parts = [
+        addressForm.houseNumber.trim(),
+        addressForm.street.trim(),
+        addressForm.landmark ? addressForm.landmark.trim() : null,
+        addressForm.city.trim(),
+        addressForm.state.trim(),
+        addressForm.pincode.trim()
+      ].filter(Boolean);
+      const combined = parts.join(", ");
       const payload: any = {
         ...addressForm,
         fullName: addressForm.fullName.trim(),
@@ -318,6 +587,8 @@ export default function UserDashboard() {
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
         pincode: addressForm.pincode.trim(),
+        address: combined,
+        deliveryAddress: combined,
       };
       if (!isEditing) payload.userId = user.id;
       const res = await fetch(url, { method, headers: getAuthHeaders(), body: JSON.stringify(payload) });
@@ -332,7 +603,15 @@ export default function UserDashboard() {
           }, 1200);
           return;
         }
-        const errMsg = typeof data.detail === "string" ? data.detail : "Failed to save address";
+        const errMsg = typeof data.detail === "string"
+          ? data.detail
+          : Array.isArray(data.detail)
+            ? data.detail.map((d: any) => {
+                const field = Array.isArray(d.loc) ? d.loc[d.loc.length - 1] : "";
+                const msg = (d.msg || "").replace(/^Value error,\s*/i, "");
+                return field && field !== "body" ? `${field}: ${msg}` : msg;
+              }).join(". ")
+            : "Failed to save address";
         setAddressFeedback({ type: "error", msg: errMsg });
         return;
       }
@@ -392,7 +671,6 @@ export default function UserDashboard() {
     finally { setDeletingAddressId(null); }
   };
 
-  const [healthLogs, setHealthLogs] = useState<any[]>([]);
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
   const [isTrackingMode, setIsTrackingMode] = useState(false);
 
@@ -432,20 +710,11 @@ export default function UserDashboard() {
     } catch {} finally { if (!silent) setLoadingOrders(false); }
   }, []);
 
-  const fetchHealthLogs = useCallback(async (email: string) => {
-    try {
-      const res = await fetch(`/api/ai-prescribe?email=${email}`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setHealthLogs(data.healthLogs || data.logs || []);
-    } catch {}
-  }, []);
-
   useEffect(() => {
     if (user) {
       fetchOrders(user.email);
       fetchLoyalty(user.email);
       fetchAddresses(user.id);
-      fetchHealthLogs(user.email);
       
       const interval = setInterval(() => {
         fetchOrders(user.email, true);
@@ -453,7 +722,7 @@ export default function UserDashboard() {
       }, 5000);
       return () => { if (interval) clearInterval(interval); };
     }
-  }, [user, fetchOrders, fetchLoyalty, fetchAddresses, fetchHealthLogs]);
+  }, [user, fetchOrders, fetchLoyalty, fetchAddresses]);
 
   useEffect(() => {
     if (isTrackingMode && trackingOrder) {
@@ -489,7 +758,7 @@ export default function UserDashboard() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a href="/" className="flex items-center gap-2">
-              <span className="text-3xl font-serif font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
+              <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Customer Portal</span>
@@ -511,7 +780,7 @@ export default function UserDashboard() {
         
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900 mb-2">
+          <h1 className="text-3xl md:text-5xl font-sans tracking-tight text-slate-900 mb-2">
             Welcome back, <span className="text-[#1E3A2F] font-sans font-black">{user.name?.split(" ")[0]}</span>
           </h1>
           <p className="text-slate-500 font-medium text-sm">Manage your prescriptions, orders, and delivery addresses.</p>
@@ -522,7 +791,7 @@ export default function UserDashboard() {
           {[
             { icon: Package, label: "Total Orders", value: orders.length, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
             { icon: CheckCircle, label: "Delivered", value: deliveredCount, color: "text-emerald-700 bg-emerald-50" },
-            { icon: TrendingUp, label: "Total Spent", value: `₹${totalSpent.toFixed(0)}`, color: "text-teal-800 bg-teal-50" },
+            { icon: TrendingUp, label: "Total Spent", value: `${totalSpent}`, color: "text-teal-800 bg-teal-50" },
             { icon: Gift, label: "Loyalty Points", value: loyaltyPoints, color: "text-amber-700 bg-amber-50" },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-[24px] p-6 border border-[#E2EFE7] shadow-sm">
@@ -537,7 +806,6 @@ export default function UserDashboard() {
         <div className="flex gap-2 bg-[#EBF4EE] p-1.5 rounded-full mb-8 w-fit border border-[#D5E6DC]">
           {[
             { id: "orders", label: "Order History", icon: Package },
-            { id: "health", label: "AI Health Logs", icon: Activity },
             { id: "profile", label: "Profile & Addresses", icon: User }
           ].map(t => (
             <button 
@@ -554,7 +822,7 @@ export default function UserDashboard() {
         {tab === "orders" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">Your Orders</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900">Your Orders</h2>
               <a href="/" className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md">
                 <Search size={14} /> Order Medicines
               </a>
@@ -593,9 +861,9 @@ export default function UserDashboard() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-xl text-[#1E3A2F]">₹{(order.totalAmount || 0).toFixed(2)}</p>
-                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold">Inc. ₹{order.surgeFee || 0} surge</p>}
-                    {(order.discountApplied || 0) > 0 && <p className="text-xs text-emerald-700 font-bold">Saved ₹{(order.discountApplied || 0).toFixed(2)}</p>}
+                    <p className="font-black text-xl text-[#1E3A2F]">{order.totalAmount || 0}</p>
+                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold">Inc. {order.surgeFee || 0} surge</p>}
+                    {(order.discountApplied || 0) > 0 && <p className="text-xs text-emerald-700 font-bold">Saved {order.discountApplied || 0}</p>}
                   </div>
                 </div>
 
@@ -609,7 +877,7 @@ export default function UserDashboard() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-black text-slate-700">×{item.quantity || item.qty || 1}</p>
-                        <p className="text-xs font-bold text-[#1E3A2F]">₹{(item.priceAtTime ?? item.price ?? 0).toFixed(2)}</p>
+                        <p className="text-xs font-bold text-[#1E3A2F]">{item.priceAtTime ?? item.price ?? 0}</p>
                       </div>
                     </div>
                   ))}
@@ -646,53 +914,12 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* Health Log Tab */}
-        {tab === "health" && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">AI Health Consultations</h2>
-              <a href="/#ai" className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md">
-                <Sparkles size={14} /> New Consultation
-              </a>
-            </div>
-            {healthLogs.length === 0 ? (
-              <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-16 text-center shadow-sm">
-                <Activity size={44} className="mx-auto mb-4 text-slate-300" />
-                <h3 className="font-bold text-slate-700 text-lg mb-2">No consultations recorded</h3>
-                <p className="text-sm text-slate-400 mb-6">Describe your symptoms to get verified medicine suggestions.</p>
-                <a href="/#ai" className="inline-flex items-center gap-2 bg-[#1E3A2F] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider">
-                  Start Consultation
-                </a>
-              </div>
-            ) : healthLogs.map((log: any) => (
-              <div key={log.id} className="bg-white rounded-[28px] border border-[#E2EFE7] shadow-sm p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-[#E8F3ED] rounded-xl flex items-center justify-center text-[#1E3A2F]"><Activity size={15} /></div>
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                    {log.createdAt ? new Date(log.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recent"}
-                  </span>
-                </div>
-                <div className="bg-[#F6FAF7] rounded-2xl p-4 mb-3 border border-[#E2EFE7]">
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Symptoms Described</p>
-                  <p className="text-sm text-slate-800 font-medium">{log.symptoms}</p>
-                </div>
-                {log.prescription && (
-                  <div className="bg-[#EBF4EE] rounded-2xl p-4 border border-[#D5E6DC]">
-                    <p className="text-[10px] text-[#1E3A2F] font-black uppercase tracking-widest mb-1">Recommended Treatments</p>
-                    <p className="text-sm text-[#1E3A2F] font-bold">{log.prescription}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Profile Tab */}
         {tab === "profile" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] shadow-sm p-8">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-[#1E3A2F] rounded-2xl flex items-center justify-center text-white text-2xl font-serif font-black shadow-md">
+                <div className="w-16 h-16 bg-[#1E3A2F] rounded-2xl flex items-center justify-center text-white text-2xl font-sans font-black shadow-md">
                   {user.name?.[0]?.toUpperCase()}
                 </div>
                 <div>
@@ -809,7 +1036,7 @@ export default function UserDashboard() {
               {/* Phone */}
               <div>
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Phone Number <span className="text-rose-500">*</span></label>
-                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="10-digit mobile number" maxLength={10} />
+                <input value={addressForm.phone} onChange={e => setAddressForm(p => ({ ...p, phone: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.phone ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g. +91 98200 11221 or 9820011221" maxLength={16} />
                 {addressErrors.phone && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.phone}</p>}
               </div>
 
@@ -878,6 +1105,12 @@ export default function UserDashboard() {
       )}
 
       {selectedOrder && <OrderDetailsModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />}
+      {isTrackingMode && trackingOrder && (
+        <LiveTrackingModal
+          order={trackingOrder}
+          onClose={() => { setIsTrackingMode(false); setTrackingOrder(null); }}
+        />
+      )}
     </div>
   );
 }

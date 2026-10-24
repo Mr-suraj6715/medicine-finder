@@ -17,6 +17,7 @@ const STATUS_COLORS: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-800 border-amber-200",
   PROCESSING: "bg-blue-50 text-blue-800 border-blue-200",
   CONFIRMED: "bg-indigo-50 text-indigo-800 border-indigo-200",
+  PENDING_RIDER_ACCEPT: "bg-amber-50 text-amber-700 border-amber-200",
   RIDER_ASSIGNED: "bg-sky-50 text-sky-800 border-sky-200",
   RIDER_AT_PHARMACY: "bg-teal-50 text-teal-800 border-teal-200",
   RIDER_PICKED_UP: "bg-teal-50 text-teal-800 border-teal-200",
@@ -35,6 +36,7 @@ export default function ShopDashboard() {
   const [riders, setRiders] = useState<any[]>([]);
   const [reassignModalOrder, setReassignModalOrder] = useState<any | null>(null);
   const [reassigning, setReassigning] = useState(false);
+  const [assigningRiderId, setAssigningRiderId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newMed, setNewMed] = useState({ name: "", category: "", price: "", stock: "" });
   const [editingStock, setEditingStock] = useState<string | null>(null);
@@ -212,6 +214,7 @@ export default function ShopDashboard() {
   };
 
   const handleReassignRider = async (orderId: string, riderId: string) => {
+    setAssigningRiderId(riderId);
     setReassigning(true);
     try {
       const res = await fetch('/api/shop/reassign', {
@@ -223,13 +226,15 @@ export default function ShopDashboard() {
       if (res.ok && data.success) {
         setReassignModalOrder(null);
         if (user) fetchShopData(user.id);
+        fetchRiders();
       } else {
-        alert(data.error || "Failed to assign rider");
+        alert(data.detail || data.error || data.message || "Failed to assign rider");
       }
     } catch (e) {
       console.error(e);
       alert("Network error reassigning rider");
     } finally {
+      setAssigningRiderId(null);
       setReassigning(false);
     }
   };
@@ -881,7 +886,7 @@ export default function ShopDashboard() {
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <a href="/" className="flex items-center gap-2">
-              <span className="text-3xl font-serif font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
+              <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Pharmacy Merchant</span>
@@ -911,7 +916,7 @@ export default function ShopDashboard() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900 mb-2">
+          <h1 className="text-3xl md:text-5xl font-sans tracking-tight text-slate-900 mb-2">
             Pharmacy Portal 🏪 <span className="text-[#1E3A2F] font-sans font-black">{settings.name || user.name}</span>
           </h1>
           <p className="text-slate-500 font-medium text-sm">Manage incoming customer orders, inventory stock, and delivery dispatches.</p>
@@ -920,7 +925,7 @@ export default function ShopDashboard() {
         {/* Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { icon: TrendingUp, label: "Total Revenue", value: `₹${totalRevenue.toLocaleString()}`, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
+            { icon: TrendingUp, label: "Total Revenue", value: totalRevenue, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
             { icon: ShoppingCart, label: "Pending Orders", value: pendingOrders, color: "text-amber-800 bg-amber-50" },
             { icon: Package, label: "Items in Stock", value: totalItems, color: "text-teal-800 bg-teal-50" },
             { icon: AlertCircle, label: "Low Stock Alert", value: lowStock, color: "text-rose-600 bg-rose-50" },
@@ -956,7 +961,7 @@ export default function ShopDashboard() {
         {tab === "orders" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">Incoming Customer Orders</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900">Incoming Customer Orders</h2>
             </div>
             {orders.length === 0 ? (
               <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-16 text-center shadow-sm">
@@ -978,25 +983,40 @@ export default function ShopDashboard() {
                     </div>
                     <p className="font-bold text-slate-900 text-base">{order.customer || "Customer"}</p>
                     <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-0.5"><MapPin size={12} className="text-slate-400" /> {order.customerAddress || "Local Delivery"}</p>
+                    {order.customerPhone && <p className="text-xs text-slate-500 font-medium flex items-center gap-1 mt-0.5"><Phone size={11} className="text-slate-400" /> {order.customerPhone}</p>}
                     <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Clock size={11} /> {order.time || "Recent"}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-xl text-[#1E3A2F]">₹{(order.total + (order.isEmergency ? order.surgeFee : 0)).toLocaleString()}</p>
+                    <p className="font-black text-xl text-[#1E3A2F]">{order.total + (order.isEmergency ? order.surgeFee : 0)}</p>
                     <p className="text-xs text-slate-400 font-medium">{order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? "s" : ""}</p>
-                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold mt-1">Surcharge: ₹{order.surgeFee}</p>}
+                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold mt-1">Surcharge: {order.surgeFee}</p>}
                   </div>
                 </div>
 
                 {/* Rider assignment & cancellation banner */}
                 <div className="mb-4 bg-[#F6FAF7] rounded-2xl p-4 border border-[#E2EFE7] text-xs">
-                  {order.riderName ? (
+                  {order.status === "PENDING_RIDER_ACCEPT" ? (
+                    <div className="flex justify-between items-center flex-wrap gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" />
+                        <span className="font-bold text-amber-800">Awaiting rider acceptance</span>
+                        {order.riderName && <span className="text-slate-500 ml-1">→ {order.riderName}</span>}
+                      </div>
+                      <button
+                        onClick={() => setReassignModalOrder(order)}
+                        className="text-[10px] font-black bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors uppercase tracking-wider"
+                      >
+                        <RefreshCw size={11} /> Reassign
+                      </button>
+                    </div>
+                  ) : order.riderName && order.status !== "PENDING_RIDER_ACCEPT" ? (
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <div className="flex items-center gap-2 text-slate-700">
                         <UserCheck size={16} className="text-[#1E3A2F]" />
                         <div>
-                          <span className="font-bold text-slate-900">Assigned Rider: {order.riderName}</span>
+                          <span className="font-bold text-slate-900">Rider: {order.riderName}</span>
                           {order.riderRating && <span className="text-amber-500 font-bold ml-2">⭐ {order.riderRating.toFixed(1)}</span>}
-                          {order.riderPhone && <span className="text-slate-500 ml-2">({order.riderPhone})</span>}
+                          {order.riderPhone && <span className="text-slate-500 ml-2 flex items-center gap-1 inline-flex"><Phone size={10}/> {order.riderPhone}</span>}
                         </div>
                       </div>
                       {order.status !== "DELIVERED" && (
@@ -1011,24 +1031,24 @@ export default function ShopDashboard() {
                   ) : order.cancelledRiderName ? (
                     <div className="flex justify-between items-center flex-wrap gap-2">
                       <div className="text-rose-600 font-medium">
-                        ⚠️ Order was released by previous rider <strong>({order.cancelledRiderName})</strong>.
+                        ⚠️ Rider <strong>{order.cancelledRiderName}</strong> rejected/released this order.
                       </div>
                       <button
                         onClick={() => setReassignModalOrder(order)}
                         className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                       >
-                        <UserCheck size={11} /> Reassign Rider
+                        <UserCheck size={11} /> Assign Another Rider
                       </button>
                     </div>
                   ) : (
                     <div className="flex justify-between items-center flex-wrap gap-2">
-                      <span className="text-slate-500 font-medium">Available to all active nearby riders</span>
+                      <span className="text-slate-500 font-medium">No rider assigned yet</span>
                       {order.status !== "DELIVERED" && (
                         <button
                           onClick={() => setReassignModalOrder(order)}
                           className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                         >
-                          <UserCheck size={11} /> Directly Assign Rider
+                          <UserCheck size={11} /> Assign Rider
                         </button>
                       )}
                     </div>
@@ -1039,7 +1059,7 @@ export default function ShopDashboard() {
                   {order.items?.map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-[#F6FAF7] border border-[#E2EFE7] rounded-xl p-3 text-sm">
                       <div className="flex items-center gap-2"><Pill size={15} className="text-[#1E3A2F]" /> <span className="font-bold text-slate-800">{item.name}</span></div>
-                      <span className="text-slate-500 font-bold text-xs">×{item.qty} — ₹{(item.price * item.qty).toFixed(0)}</span>
+                      <span className="text-slate-500 font-bold text-xs">×{item.qty} — {item.price * item.qty}</span>
                     </div>
                   ))}
                 </div>
@@ -1069,7 +1089,8 @@ export default function ShopDashboard() {
                     <div className="flex items-center justify-between w-full group">
                       <div className="flex items-center gap-2 px-4 py-2 bg-[#E8F3ED] text-[#1E3A2F] rounded-full text-[10px] font-black uppercase tracking-widest border border-[#D5E6DC]">
                         <Navigation size={12} className="animate-pulse" />
-                        {order.status === "CONFIRMED" && "Awaiting Rider Acceptance"}
+                        {order.status === "CONFIRMED" && "Packed — Open for Riders"}
+                        {order.status === "PENDING_RIDER_ACCEPT" && "Awaiting Rider Acceptance"}
                         {order.status === "RIDER_ASSIGNED" && "Rider Heading to Store"}
                         {order.status === "RIDER_AT_PHARMACY" && "Rider at your Store"}
                         {order.status === "RIDER_PICKED_UP" && "Rider Picked Up Order"}
@@ -1097,7 +1118,7 @@ export default function ShopDashboard() {
           <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
-                <h2 className="text-2xl font-serif font-bold text-slate-900">Medicine Catalog & Stock</h2>
+                <h2 className="text-2xl font-sans font-bold text-slate-900">Medicine Catalog & Stock</h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">Manage stock individually or bulk-upload thousands of medicines with CSV.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1168,7 +1189,7 @@ export default function ShopDashboard() {
                           {editingStock === med.id ? (
                             <input type="number" step="0.01" min="0" value={editStock.price} onChange={e => setEditStock(p => ({ ...p, price: e.target.value }))}
                               className="w-20 border border-emerald-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F]" />
-                          ) : <span className="font-black text-[#1E3A2F]">₹{med.price}</span>}
+                          ) : <span className="font-black text-[#1E3A2F]">{med.price}</span>}
                         </td>
                         <td className="px-6 py-4">
                           {editingStock === med.id ? (
@@ -1223,7 +1244,7 @@ export default function ShopDashboard() {
         {tab === "ai-mappings" && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-serif font-bold text-slate-900 mb-1">AI Recommendation Mapping Review</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900 mb-1">AI Recommendation Mapping Review</h2>
               <p className="text-slate-500 text-xs md:text-sm font-medium">Verify how your current stock matches the AI Consultant categories. Only OTC non-prescription items with positive stock are mapped.</p>
             </div>
             
@@ -1279,7 +1300,7 @@ export default function ShopDashboard() {
                                     {isRx && <span className="bg-rose-50 text-rose-500 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Rx Only</span>}
                                   </div>
                                   <div className="text-right">
-                                    <span className="font-black text-[#1E3A2F] mr-2">₹{m.price}</span>
+                                    <span className="font-black text-[#1E3A2F] mr-2">{m.price}</span>
                                     <span className="text-slate-500 font-bold">{m.stock} left</span>
                                   </div>
                                 </div>
@@ -1300,12 +1321,12 @@ export default function ShopDashboard() {
         {tab === "analytics" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-8 shadow-sm">
-              <h3 className="font-serif font-bold text-xl text-slate-900 mb-4">Revenue Breakdown</h3>
-              <p className="text-3xl font-black text-[#1E3A2F] mb-4">₹{totalRevenue.toLocaleString()}</p>
+              <h3 className="font-sans font-bold text-xl text-slate-900 mb-4">Revenue Breakdown</h3>
+              <p className="text-3xl font-black text-[#1E3A2F] mb-4">{totalRevenue}</p>
               <p className="text-slate-500 text-sm leading-relaxed">Generated across {inventory.reduce((a, b) => a + (b.sold || 0), 0)} unit deliveries through MediFind network.</p>
             </div>
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-8 shadow-sm">
-              <h3 className="font-serif font-bold text-xl text-slate-900 mb-4">Top Dispensed Items</h3>
+              <h3 className="font-sans font-bold text-xl text-slate-900 mb-4">Top Dispensed Items</h3>
               <div className="space-y-3">
                 {inventory.slice(0, 4).map(m => (
                   <div key={m.id} className="flex justify-between items-center py-2 border-b border-[#E2EFE7] text-sm">
@@ -1321,7 +1342,7 @@ export default function ShopDashboard() {
         {/* SETTINGS TAB */}
         {tab === "settings" && (
           <div className="bg-white rounded-[32px] border border-[#E2EFE7] shadow-sm p-8 max-w-2xl">
-            <h2 className="font-serif font-bold text-slate-900 text-2xl mb-2">Pharmacy Settings ⚙️</h2>
+            <h2 className="font-sans font-bold text-slate-900 text-2xl mb-2">Pharmacy Settings ⚙️</h2>
             <p className="text-slate-500 text-sm mb-6">Manage your shop availability, working hours, and contact information.</p>
             
             {settingsSaved && (
@@ -1383,7 +1404,7 @@ export default function ShopDashboard() {
           <div className="bg-white rounded-[32px] p-8 max-w-lg w-full shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="font-serif font-bold text-slate-900 text-xl">Assign / Reassign Rider 🚴</h3>
+                <h3 className="font-sans font-bold text-slate-900 text-xl">Assign / Reassign Rider 🚴</h3>
                 <p className="text-xs text-slate-500 font-medium">Order #{reassignModalOrder.id.slice(-6)} • {reassignModalOrder.customer}</p>
               </div>
               <button onClick={() => setReassignModalOrder(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100">
@@ -1396,24 +1417,32 @@ export default function ShopDashboard() {
                 <p className="text-center text-xs text-slate-400 py-6">No riders registered in database.</p>
               ) : (
                 riders.map(r => (
-                  <div key={r.id} className="p-4 rounded-2xl border border-[#E2EFE7] hover:bg-[#F6FAF7] transition-all flex justify-between items-center">
+                  <div key={r.id} className={`p-4 rounded-2xl border transition-all flex justify-between items-center ${r.isBusy ? "border-slate-200 bg-slate-50 opacity-70" : "border-[#E2EFE7] hover:bg-[#F6FAF7]"}`}>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-900 text-sm">{r.name || r.email}</span>
                         <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-full flex items-center gap-0.5">
                           <Star size={10} fill="currentColor" /> {r.riderRating?.toFixed(1) || "5.0"}
                         </span>
+                        {r.isAvailable ? (
+                          <span className="text-[10px] font-black bg-[#E8F3ED] text-[#1E3A2F] px-2 py-0.5 rounded-full">✓ Available</span>
+                        ) : (
+                          <span className="text-[10px] font-black bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">⏳ Busy</span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                        Vehicle: {r.vehicleType || "Motorcycle"} • Delivered: {r.completedDeliveries || 0}
+                        {r.vehicleType || "Motorcycle"} • {r.completedDeliveries || 0} deliveries{r.phone ? ` • ${r.phone}` : ""}
                       </p>
                     </div>
                     <button
                       onClick={() => handleReassignRider(reassignModalOrder.realId || reassignModalOrder.id, r.id)}
-                      disabled={reassigning}
-                      className="bg-[#1E3A2F] hover:bg-[#152a22] text-white text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 disabled:opacity-50 uppercase tracking-wider"
+                      disabled={!!assigningRiderId || r.isBusy}
+                      title={r.isBusy ? "Rider is currently busy with another delivery" : "Assign this rider"}
+                      className={`text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider ${
+                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white disabled:opacity-50"
+                      }`}
                     >
-                      {reassigning ? "Assigning..." : "Assign"}
+                      {assigningRiderId === r.id ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
                     </button>
                   </div>
                 ))
@@ -1434,7 +1463,7 @@ export default function ShopDashboard() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-serif font-bold text-slate-900 text-xl">Add New Medicine 💊</h3>
+              <h3 className="font-sans font-bold text-slate-900 text-xl">Add New Medicine 💊</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddMedicine} className="space-y-4">
@@ -1480,7 +1509,7 @@ export default function ShopDashboard() {
                   <FileSpreadsheet size={24} />
                 </div>
                 <div>
-                  <h3 className="font-serif font-bold text-slate-900 text-xl flex items-center gap-2">
+                  <h3 className="font-sans font-bold text-slate-900 text-xl flex items-center gap-2">
                     Import Medicine Inventory
                     <span className="text-xs font-sans font-bold bg-[#E8F3ED] text-[#1E3A2F] px-2.5 py-0.5 rounded-full">Excel (.xlsx/.xls) & CSV</span>
                   </h3>
@@ -1860,8 +1889,8 @@ export default function ShopDashboard() {
                                     <td className="px-3 py-2 text-slate-500">{rec.category || "General"}</td>
                                     <td className="px-3 py-2 font-mono text-slate-600">{rec.batchNumber || "—"}</td>
                                     <td className="px-3 py-2 font-bold text-slate-800">{rec.stock} units</td>
-                                    <td className="px-3 py-2 font-black text-[#1E3A2F]">₹{rec.price.toFixed(2)}</td>
-                                    <td className="px-3 py-2 text-slate-500">{rec.mrp ? `₹${rec.mrp.toFixed(2)}` : "—"}</td>
+                                    <td className="px-3 py-2 font-black text-[#1E3A2F]">{rec.price}</td>
+                                    <td className="px-3 py-2 text-slate-500">{rec.mrp ? rec.mrp : "—"}</td>
                                     <td className="px-3 py-2 text-slate-600">{rec.expiryDate || "—"}</td>
                                     <td className="px-3 py-2 text-slate-600">{rec.stockLocation || "—"}</td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -1916,7 +1945,7 @@ export default function ShopDashboard() {
                     <div className="w-16 h-16 bg-[#1E3A2F] text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
                       <Check size={32} />
                     </div>
-                    <h4 className="text-2xl font-serif font-bold text-slate-900">Inventory Import Complete!</h4>
+                    <h4 className="text-2xl font-sans font-bold text-slate-900">Inventory Import Complete!</h4>
                     <p className="text-xs text-slate-600 mt-1">Your pharmacy stock catalog has been successfully updated in the database.</p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">

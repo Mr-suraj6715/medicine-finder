@@ -10,6 +10,21 @@ export function proxy(request: NextRequest) {
 
     const isAuthenticated = !!(roleCookie && tokenCookie);
 
+    if (pathname === "/dashboard" || pathname === "/dashboard/") {
+      if (!isAuthenticated) {
+        const loginUrl = new URL("/", request.url);
+        loginUrl.searchParams.set("auth", "login");
+        return NextResponse.redirect(loginUrl);
+      }
+      if (roleCookie === "shop_owner") {
+        return NextResponse.redirect(new URL("/dashboard/shop", request.url));
+      } else if (roleCookie === "rider") {
+        return NextResponse.redirect(new URL("/dashboard/rider", request.url));
+      } else {
+        return NextResponse.redirect(new URL("/dashboard/user", request.url));
+      }
+    }
+
     if (pathname.startsWith("/dashboard/shop")) {
       if (!isAuthenticated) {
         const loginUrl = new URL("/", request.url);

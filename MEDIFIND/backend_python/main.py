@@ -20,6 +20,11 @@ from routers import ai as ai_router
 load_dotenv()
 
 Base.metadata.create_all(bind=engine)
+try:
+    from migrate_sqlite import migrate
+    migrate()
+except Exception as e:
+    print(f"Migration note: {e}")
 
 app = FastAPI(
     title="MediFind Python Backend API",
@@ -36,6 +41,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def enforce_utf8_charset(request, call_next):
+    response = await call_next(request)
+    ct = response.headers.get("content-type", "")
+    if "application/json" in ct and "charset" not in ct:
+        response.headers["content-type"] = "application/json; charset=utf-8"
+    return response
 
 # Register routers
 app.include_router(auth_router.router)
