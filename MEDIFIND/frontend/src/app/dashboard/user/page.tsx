@@ -825,9 +825,6 @@ export default function UserDashboard() {
           </div>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            <a href="/dashboard/shop" className="hidden sm:flex items-center gap-1.5 text-[#1E3A2F] hover:bg-[#E8F3ED] text-xs font-bold px-3 py-2 rounded-full border border-[#D5E6DC] transition-colors">
-              <Store size={14} /> Shop Owner Portal
-            </a>
             <div className="flex items-center gap-2 bg-[#F0F6F2] border border-[#D5E6DC] px-4 py-2 rounded-full text-xs">
               <Award size={15} className="text-[#1E3A2F]" />
               <span className="font-black text-[#1E3A2F]">{loyaltyPoints} Loyalty Pts</span>

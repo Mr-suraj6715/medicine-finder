@@ -1568,11 +1568,6 @@ export default function Home() {
                         <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 font-bold">
                           {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} My Dashboard
                         </a>
-                        {user.role !== "shop_owner" && (
-                          <a href="/dashboard/shop" className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-emerald-50 text-[#1E3A2F] font-bold">
-                            <Store size={15} /> Shop Owner Portal
-                          </a>
-                        )}
                         <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-rose-50 text-rose-600 w-full text-left font-bold border-t border-slate-100 mt-1">
                           <LogOut size={15} /> Sign out
                         </button>
