@@ -147,6 +147,12 @@ def ensure_demo_data_seeded(db: Session) -> dict:
         )
         db.add(customer)
         db.flush()
+    else:
+        if not customer.name:
+            customer.name = "Demo Customer"
+        if not customer.phone:
+            customer.phone = "9820011221"
+        db.flush()
 
     # Ensure Customer has a saved Address for easy 1-click checkout
     cust_addr = db.query(models.Address).filter(models.Address.userId == customer.id).first()
@@ -279,6 +285,10 @@ def ensure_demo_data_seeded(db: Session) -> dict:
             updatedAt=current_iso_time()
         )
         db.add(rider_user)
+        db.flush()
+    else:
+        if not rider_user.name:
+            rider_user.name = "Rider Partner"
         db.flush()
 
     # 4. Medicines & Inventories
