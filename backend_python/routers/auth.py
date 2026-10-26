@@ -4,6 +4,10 @@ from database import get_db
 import models, schemas, auth
 from utils import generate_cuid, current_iso_time
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 import secrets
 import hashlib
 from datetime import datetime, timezone, timedelta
@@ -244,7 +248,7 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
         if not raw_token:
             raise HTTPException(status_code=400, detail="Google ID token is required.")
 
-        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or "").strip().strip('"').strip("'")
         if not google_client_id:
             raise HTTPException(
                 status_code=500,
@@ -367,7 +371,7 @@ def link_google(req: schemas.GoogleAuthRequest, current_user: models.User = Depe
         if not raw_token:
             raise HTTPException(status_code=400, detail="Google ID token is required.")
 
-        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or "").strip().strip('"').strip("'")
         if not google_client_id:
             raise HTTPException(
                 status_code=500,

@@ -5,6 +5,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from database import engine, Base
 from utils import generate_cuid, current_iso_time  # noqa: F401 – re-exported for backward compatibility
 
@@ -17,7 +19,6 @@ from routers import shop as shop_router
 from routers import inventory as inventory_router
 from routers import ai as ai_router
 
-load_dotenv()
 
 Base.metadata.create_all(bind=engine)
 try:
