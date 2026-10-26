@@ -1,4 +1,4 @@
-import os
+﻿import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -15,29 +15,33 @@ if not SQLALCHEMY_DATABASE_URL:
     DB_PATH = os.path.join(BASE_DIR, "frontend", "prisma", "dev.db")
     SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH}"
 
-# For PostgreSQL, we might need to change the connection string if it's 'postgres://' instead of 'postgresql://'
+# Render provides postgres:// but SQLAlchemy requires postgresql://
 if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
     SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOCAL_SQLITE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'frontend', 'prisma', 'dev.db')}"
+LOCAL_SQLITE_URL = "sqlite:///" + os.path.join(BASE_DIR, "frontend", "prisma", "dev.db")
 
 try:
+    is_sqlite = SQLALCHEMY_DATABASE_URL.startswith("sqlite")
+    connect_args = {"check_same_thread": False} if is_sqlite else {}
+
     engine_kwargs = {
         "connect_args": connect_args,
         "pool_pre_ping": True,
         "pool_recycle": 300,
     }
-    if not SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+    if not is_sqlite:
         engine_kwargs["pool_size"] = 5
         engine_kwargs["max_overflow"] = 5
+
     test_engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
-    # Test connection
     with test_engine.connect() as conn:
         pass
     engine = test_engine
+
 except Exception as e:
-    print(f"Warning: Primary database connection failed ({e}). Falling back to local SQLite at {LOCAL_SQLITE_URL}")
+    print(f"Warning: Primary database connection failed ({e}). Falling back to local SQLite.")
     SQLALCHEMY_DATABASE_URL = LOCAL_SQLITE_URL
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
@@ -46,8 +50,8 @@ except Exception as e:
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-
 Base = declarative_base()
+
 
 def get_db():
     db = SessionLocal()

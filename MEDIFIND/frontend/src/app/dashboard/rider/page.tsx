@@ -5,6 +5,8 @@ import {
   Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
+import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
+import { Button } from "@/components/ui/Button";
 import dynamic from "next/dynamic";
 
 const MapContainer = dynamic(() => import("react-leaflet").then(m => m.MapContainer), { ssr: false });
@@ -58,8 +60,9 @@ function DeliveryMap({ pharmacy, customer, rider }: { pharmacy: any; customer: a
     <div className="w-full h-full rounded-[28px] overflow-hidden shadow-inner border border-[#E2EFE7]">
       <MapContainer center={[centerLat, centerLng]} zoom={14} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer 
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
         <Marker position={[pharmacy.lat, pharmacy.lng]} icon={shopIcon}><Popup>Pharmacy</Popup></Marker>
         <Marker position={[customer.lat, customer.lng]} icon={customerIcon}><Popup>Customer Destination</Popup></Marker>
@@ -331,8 +334,8 @@ export default function RiderDashboard() {
   const totalEarnings = emergencyDeliveries.reduce((sum, o) => sum + (o.surgeFee || 0), 0);
 
   if (authLoading || !user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
-      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center">
+      <div className="bg-[#078B5A] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
         <HeartPulse size={32} />
       </div>
       <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Delivery Partner Authorization...</p>
@@ -340,12 +343,15 @@ export default function RiderDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col md:flex-row font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col md:flex-row font-sans text-slate-900">
       {/* Sidebar (Hers Aesthetic) */}
       <aside className="w-full md:w-72 bg-white border-r border-[#E2EFE7] flex flex-col z-20">
         <div className="p-8">
           <div className="flex items-center gap-3 mb-10">
-            <a href="/" className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</a>
+            <a href="/" className="flex items-center gap-2.5 text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
+              <span>medifind</span>
+            </a>
           </div>
 
           <nav className="space-y-1.5">
@@ -361,7 +367,7 @@ export default function RiderDashboard() {
                 key={item.id}
                 onClick={() => setTab(item.id as any)}
                 className={`w-full flex items-center gap-3 px-5 py-3.5 rounded-full text-xs font-black uppercase tracking-wider transition-all ${
-                  tab === item.id ? "bg-[#1E3A2F] text-white shadow-md" : item.id === "pending" && hasPendingAssignment ? "text-amber-700 bg-amber-50 border border-amber-200 animate-pulse" : "text-slate-600 hover:bg-[#F6FAF7] hover:text-[#1E3A2F]"
+                  tab === item.id ? "bg-[#078B5A] text-white shadow-md" : item.id === "pending" && hasPendingAssignment ? "text-amber-700 bg-amber-50 border border-amber-200 animate-pulse" : "text-slate-600 hover:bg-[#F6FAF7] hover:text-[#1E3A2F]"
                 }`}
               >
                 <item.icon size={17} /> {item.label}
@@ -403,7 +409,7 @@ export default function RiderDashboard() {
             </p>
           </div>
           {tab === "earnings" && (
-            <div className="bg-[#1E3A2F] text-white px-7 py-3.5 rounded-full shadow-lg flex items-center gap-3">
+            <div className="bg-[#078B5A] text-white px-7 py-3.5 rounded-full shadow-lg flex items-center gap-3">
               <DollarSign size={22} className="text-emerald-300" />
               <div>
                 <p className="text-[10px] font-black uppercase opacity-80 tracking-widest text-emerald-200">Surge Earnings</p>
@@ -535,7 +541,7 @@ export default function RiderDashboard() {
                 <button
                   type="submit"
                   disabled={profileSaving}
-                  className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+                  className="bg-[#078B5A] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-lg flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
                 >
                   <Save size={16} />
                   {profileSaving ? "Saving Changes..." : "Save Profile"}
@@ -577,7 +583,7 @@ export default function RiderDashboard() {
                       <div className="flex gap-2">
                         <button
                           onClick={() => acceptOrder(order.realId || order.id)}
-                          className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white py-2.5 rounded-full font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow"
+                          className="flex-1 bg-[#078B5A] hover:bg-[#152a22] text-white py-2.5 rounded-full font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shadow"
                         >
                           <CheckCircle size={14} /> Accept & Start
                         </button>
@@ -599,7 +605,7 @@ export default function RiderDashboard() {
                 <Navigation size={48} className="mx-auto text-slate-300 mb-4" />
                 <h3 className="text-lg font-bold text-slate-900">No active deliveries right now</h3>
                 <p className="text-slate-400 text-sm mt-1">Accept an assigned order above or check available tasks.</p>
-                <button onClick={() => setTab("available")} className="mt-6 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95">View Available Orders</button>
+                <button onClick={() => setTab("available")} className="mt-6 bg-[#078B5A] hover:bg-[#152a22] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95">View Available Orders</button>
               </div>
             )}
 
@@ -670,7 +676,7 @@ export default function RiderDashboard() {
                     <div className="flex gap-3">
                       <button
                         onClick={() => acceptOrder(order.realId || order.id)}
-                        className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                        className="flex-1 bg-[#078B5A] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
                       >
                         <CheckCircle size={16} /> Accept Assignment
                       </button>
@@ -698,7 +704,7 @@ export default function RiderDashboard() {
               <div key={order.id} className="bg-white rounded-[28px] shadow-sm border border-[#E2EFE7] overflow-hidden p-6 hover:shadow-md transition-shadow">
                 <div className="flex justify-between items-start mb-6">
                   <div className="flex items-center gap-3">
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${order.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}>
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-md ${order.isEmergency ? "bg-rose-500" : "bg-[#078B5A]"}`}>
                       <Navigation size={22} />
                     </div>
                     <div>
@@ -768,7 +774,7 @@ export default function RiderDashboard() {
                 {tab === "available" && (
                   <button 
                     onClick={() => acceptOrder(order.realId || order.id)}
-                    className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
+                    className="w-full bg-[#078B5A] hover:bg-[#152a22] text-white py-4 rounded-full font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow-md flex items-center justify-center gap-2"
                   >
                     Accept Delivery {order.isEmergency ? `— {order.surgeFee} Surge Earnings` : "— Standard Delivery"}
                   </button>
@@ -777,7 +783,7 @@ export default function RiderDashboard() {
                 {tab === "active" && (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
                     {order.status === "RIDER_ASSIGNED" && (
-                      <button onClick={() => updateStatus(order.realId || order.id, "RIDER_AT_PHARMACY")} className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                      <button onClick={() => updateStatus(order.realId || order.id, "RIDER_AT_PHARMACY")} className="w-full bg-[#078B5A] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
                         <Navigation size={14} /> At Pharmacy
                       </button>
                     )}
@@ -787,7 +793,7 @@ export default function RiderDashboard() {
                       </button>
                     )}
                     {order.status === "RIDER_PICKED_UP" && (
-                      <button onClick={() => updateStatus(order.realId || order.id, "OUT_FOR_DELIVERY")} className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
+                      <button onClick={() => updateStatus(order.realId || order.id, "OUT_FOR_DELIVERY")} className="w-full bg-[#078B5A] hover:bg-[#152a22] text-white py-3.5 rounded-full font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow">
                         <Navigation size={14} /> Out for Delivery
                       </button>
                     )}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -42,19 +42,10 @@ const AutoFitBounds = dynamic(() => import("react-leaflet").then(m => {
   return Bounds;
 }), { ssr: false });
 
-const MapEvents = dynamic(() => import("react-leaflet").then(m => {
-  const { useMapEvents } = m;
-  function MapEvents({ onLoad, onError }: { onLoad: () => void; onError: (e: any) => void }) {
-    useMapEvents({ load: onLoad, tileerror: onError });
-    return null;
-  }
-  return MapEvents;
-}), { ssr: false });
-
 let L: any;
 if (typeof window !== "undefined") L = require("leaflet");
 
-// â”€â”€â”€ Pharmacy data with coordinates â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Pharmacy data with coordinates ───────────────────────────────
 const NEARBY_PHARMACIES = [
   { name: "Apollo Pharmacy",    dist: "0.8 km", open: "Open till 10 PM", price: 15,    badge: "Cheapest", lat: 19.0760, lng: 72.8777 },
   { name: "HealthPlus Medicos", dist: "1.2 km", open: "24/7 Open",       price: 18.50, badge: null,        lat: 19.1136, lng: 72.8697 },
@@ -93,13 +84,14 @@ const PRESET_DELIVERY_AREAS = [
 import {
   Search, MapPin, HeartPulse, Menu, Star, Map as MapIcon,
   Navigation, Pill, ChevronRight, ShieldCheck, Globe,
-  ShoppingCart, Minus, Plus, Gift, Sparkles, X,
-  Activity, History, User, Store, Eye, EyeOff,
+  ShoppingCart, Minus, Plus, Gift, Brain, Sparkles, X,
+  Activity, History, Stethoscope, User, Store, Eye, EyeOff,
   Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award, KeyRound
 } from "lucide-react";
 import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, getAuthToken, type AuthUser } from "@/lib/auth";
+import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 
-// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Types ────────────────────────────────────────────────────────
 type CartItem = { inventory: any; medicine: any; quantity: number };
 interface PharmacyMarker { 
   name: string; 
@@ -126,7 +118,6 @@ interface UserAddress {
   phone: string | null;
   houseNumber: string | null;
   street: string | null;
-  area: string | null;
   landmark: string | null;
   city: string | null;
   state: string | null;
@@ -137,7 +128,7 @@ interface UserAddress {
   isDefault: boolean;
 }
 
-// â”€â”€â”€ LeafletMap Sub-Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── LeafletMap Sub-Component ─────────────────────────────────────
 function LeafletMap({
   lat = 19.0760, lng = 72.8777, zoom = 13, title = "Your Location",
   focusLocation,
@@ -157,14 +148,6 @@ function LeafletMap({
   shopLocation?: { lat: number; lng: number; name?: string; address?: string; price?: number } | null;
   showRoute?: boolean;
 }) {
-  const [tilesLoaded, setTilesLoaded] = useState(false);
-  const [tileError, setTileError] = useState(false);
-
-  const handleTileLoad = useCallback(() => setTilesLoaded(true), []);
-  const handleTileError = useCallback((e: any) => {
-    console.warn("Leaflet tile load error:", e?.error?.message || e);
-    setTileError(true);
-  }, []);
   const userIcon = typeof window !== "undefined" ? L?.icon({
     iconUrl: "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png",
     shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -192,10 +175,10 @@ function LeafletMap({
     <div className="w-full h-full rounded-3xl overflow-hidden relative shadow-inner border border-slate-200">
       <MapContainer center={[mapCenterLat, mapCenterLng]} zoom={zoom} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer 
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
-        <MapEvents onLoad={handleTileLoad} onError={handleTileError} />
         
         {/* Customer / User Marker */}
         <Marker position={[mapCenterLat, mapCenterLng]} icon={userIcon}>
@@ -214,7 +197,7 @@ function LeafletMap({
                 {shopLocation.address && <div className="text-[10px] text-slate-500 mt-0.5">{shopLocation.address}</div>}
                 {shopLocation.price !== undefined && (
                   <div className="text-[11px] font-black text-emerald-700 mt-1">
-                    {shopLocation.price}
+                    ₹{shopLocation.price.toFixed(2)}
                   </div>
                 )}
               </div>
@@ -241,9 +224,9 @@ function LeafletMap({
                   <div className="text-sm font-black text-slate-900">{p.name}</div>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600">{p.distValue ? `${p.distValue.toFixed(1)} km` : "Nearby"}</span>
-                    {p.price && <span className="text-[10px] font-black text-emerald-700">{p.price}</span>}
+                    {p.price && <span className="text-[10px] font-black text-emerald-700">₹{p.price.toFixed(0)}</span>}
                   </div>
-                  {isNearest && <div className="text-[10px] font-black text-rose-500 mt-1 uppercase tracking-tighter">Fastest Delivery</div>}
+                  {isNearest && <div className="text-[10px] font-black text-rose-500 mt-1 uppercase tracking-tighter">★ Fastest Delivery</div>}
                 </div>
               </Popup>
             </Marker>
@@ -274,20 +257,12 @@ function LeafletMap({
         ) : (
           <UseMapEvents lat={mapCenterLat} lng={mapCenterLng} zoom={zoom} />
         )}
-        </MapContainer>
-        {!tilesLoaded && !tileError && (
-          <div className="absolute inset-0 z-20 flex items-center justify-center bg-white/80 backdrop-blur-sm">
-            <div className="flex flex-col items-center gap-2">
-              <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-emerald-600"></div>
-              <span className="text-[11px] text-slate-500 font-medium">Loading map tiles</span>
-            </div>
-          </div>
-        )}
-      </div>
+      </MapContainer>
+    </div>
   );
 }
 
-// â”€â”€â”€ OrderRouteMapModal Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── OrderRouteMapModal Component ─────────────────────────────────
 function OrderRouteMapModal({
   isOpen,
   onClose,
@@ -410,7 +385,7 @@ function OrderRouteMapModal({
                           <p className="text-[10px] text-slate-400">{p.dist || `${(p.distValue || 1.5).toFixed(1)} km`} away</p>
                         </div>
                         <div className="text-right shrink-0 ml-2">
-                          <span className="text-xs font-black text-[#1E3A2F]">{p.price}</span>
+                          <span className="text-xs font-black text-[#1E3A2F]">₹{p.price?.toFixed(2)}</span>
                         </div>
                       </button>
                     );
@@ -498,11 +473,11 @@ function OrderRouteMapModal({
               </div>
               <div className="flex justify-between items-center text-xs text-slate-500 pt-2 border-t border-slate-200">
                 <span>Price per unit</span>
-                <span className="font-semibold text-slate-800">{unitPrice}</span>
+                <span className="font-semibold text-slate-800">₹{unitPrice.toFixed(2)}</span>
               </div>
               <div className="flex justify-between items-center text-sm font-black pt-1 border-t border-slate-200">
                 <span>Total Amount</span>
-                <span className="text-[#1E3A2F] text-base">{totalPrice}</span>
+                <span className="text-[#1E3A2F] text-base">₹{totalPrice.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -569,7 +544,7 @@ function OrderRouteMapModal({
               onClick={() => onProceedToOrder(pharmacy, quantity)}
               className="flex-1 sm:flex-initial bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-3 rounded-xl font-bold text-xs shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
             >
-              <ShoppingCart size={15} /> Continue to Order {quantity}
+              <ShoppingCart size={15} /> Continue to Order — ₹{totalPrice.toFixed(2)}
             </button>
           </div>
         </div>
@@ -602,7 +577,7 @@ function formatApiError(detail: any, fallback: string = "Request failed"): strin
   return String(detail);
 }
 
-// â”€â”€â”€ Login Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Login Modal ──────────────────────────────────────────────────
 function LoginModal({
   onClose,
   onSuccess,
@@ -675,6 +650,7 @@ function LoginModal({
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-medium">{error}</div>}
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
@@ -700,6 +676,22 @@ function LoginModal({
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="relative flex py-4 items-center">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
+          <div className="flex-grow border-t border-slate-200"></div>
+        </div>
+
+        {/* Google Authentication */}
+        <GoogleAuthButton
+          mode="signin"
+          role={role}
+          onSuccess={onSuccess}
+          onError={(msg) => setError(msg)}
+          disabled={loading}
+        />
+
         <div className="mt-4 text-center text-sm">
           <span className="text-slate-500">Don't have an account? </span>
           <button type="button" onClick={() => onSwitch(role)} className="text-[#1E3A2F] font-semibold hover:underline">Sign up</button>
@@ -709,7 +701,10 @@ function LoginModal({
   );
 }
 
-// â”€â”€â”€ Signup Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+
+
+// ─── Signup Modal ─────────────────────────────────────────────────
 function SignupModal({ 
   onClose, 
   onSuccess, 
@@ -758,6 +753,24 @@ function SignupModal({
           <div><h2 className="text-xl font-bold text-slate-900">Create Account</h2><p className="text-xs text-slate-500">Join MediFind today</p></div>
         </div>
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-medium">{error}</div>}
+
+        {/* Google Authentication */}
+        <div className="mb-4">
+          <GoogleAuthButton
+            mode="signup"
+            role={form.role as any}
+            onSuccess={onSuccess}
+            onError={(msg) => setError(msg)}
+            disabled={loading}
+          />
+        </div>
+
+        <div className="relative flex py-2 items-center mb-4">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">or register with email</span>
+          <div className="flex-grow border-t border-slate-200"></div>
+        </div>
+
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
@@ -812,7 +825,7 @@ function SignupModal({
   );
 }
 
-// â”€â”€â”€ Main Page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Main Page ────────────────────────────────────────────────────
 export default function Home() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true);
@@ -836,7 +849,19 @@ export default function Home() {
   const [visibleAltCount, setVisibleAltCount] = useState(3);
   const [profileOpen, setProfileOpen] = useState(false);
   const [mapFocus, setMapFocus] = useState<{ lat: number; lng: number } | null>(null);
-
+  const [userSymptoms, setUserSymptoms] = useState("");
+  const [aiRecommendation, setAiRecommendation] = useState<any[]>([]);
+  const [isAnalyzingSymptoms, setIsAnalyzingSymptoms] = useState(false);
+  const [symptomMessage, setSymptomMessage] = useState("");
+  const [safetyAge, setSafetyAge] = useState<string>("");
+  const [safetyAllergies, setSafetyAllergies] = useState<string>("");
+  const [safetyPregnancy, setSafetyPregnancy] = useState<boolean>(false);
+  const [aiConsultResult, setAiConsultResult] = useState<any>(null);
+  const [safetyQuestions, setSafetyQuestions] = useState<any>(null);
+  const [escalatedRole, setEscalatedRole] = useState<"pharmacist" | "doctor" | null>(null);
+  const [escalationMessage, setEscalationMessage] = useState<string>("");
+  const [pharmacistChat, setPharmacistChat] = useState<{sender: "user" | "pharmacist", text: string}[]>([]);
+  const [pharmacistInput, setPharmacistInput] = useState<string>("");
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
   const [searchLoading, setSearchLoading] = useState(false);
   const [isEmergencyMode, setIsEmergencyMode] = useState(false);
@@ -853,7 +878,7 @@ export default function Home() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingAddress, setEditingAddress] = useState<UserAddress | null>(null);
-  const [addressForm, setAddressForm] = useState({ label: "Home", fullName: "", phone: "", houseNumber: "", street: "", area: "", landmark: "", city: "", state: "", pincode: "", isDefault: false });
+  const [addressForm, setAddressForm] = useState({ label: "Home", fullName: "", phone: "", houseNumber: "", street: "", landmark: "", city: "", state: "", pincode: "", isDefault: false });
   const [addressSaving, setAddressSaving] = useState(false);
   const [addressFeedback, setAddressFeedback] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [addressErrors, setAddressErrors] = useState<Record<string, string>>({});
@@ -954,7 +979,6 @@ export default function Home() {
       phone: user?.phone || "",
       houseNumber: "",
       street: "",
-      area: "",
       landmark: "",
       city: "Mumbai",
       state: "Maharashtra",
@@ -971,8 +995,10 @@ export default function Home() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    const rawPhone = addressForm.phone.replace(/[\s\-\(\)]/g, "");
-    const cleanPhone = rawPhone.startsWith("+91") ? rawPhone.slice(3) : rawPhone.startsWith("91") && rawPhone.length === 12 ? rawPhone.slice(2) : rawPhone.startsWith("0") && rawPhone.length === 11 ? rawPhone.slice(1) : rawPhone;
+    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
@@ -1022,8 +1048,10 @@ export default function Home() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      const rawPhone2 = addressForm.phone.replace(/[\s\-\(\)]/g, "");
-      const cleanPhone = rawPhone2.startsWith("+91") ? rawPhone2.slice(3) : rawPhone2.startsWith("91") && rawPhone2.length === 12 ? rawPhone2.slice(2) : rawPhone2.startsWith("0") && rawPhone2.length === 11 ? rawPhone2.slice(1) : rawPhone2;
+      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
+      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
+      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
+      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
       const parts = [
         addressForm.houseNumber.trim(),
         addressForm.street.trim(),
@@ -1039,7 +1067,6 @@ export default function Home() {
         phone: cleanPhone,
         houseNumber: addressForm.houseNumber.trim(),
         street: addressForm.street.trim(),
-        area: addressForm.area ? addressForm.area.trim() : null,
         landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
@@ -1101,7 +1128,6 @@ export default function Home() {
       phone: addr.phone || "",
       houseNumber: addr.houseNumber || "",
       street: addr.street || "",
-      area: addr.area || "",
       landmark: addr.landmark || "",
       city: addr.city || "",
       state: addr.state || "",
@@ -1144,19 +1170,6 @@ export default function Home() {
 
     const storedUser = getStoredUser();
     if (storedUser) {
-      if (typeof window !== "undefined") {
-        const params = new URLSearchParams(window.location.search);
-        const reqRole = params.get("role");
-        if (params.get("auth") === "login" && reqRole && reqRole !== storedUser.role) {
-          clearAuthSession();
-          setUser(null);
-          setAuthModalRole(reqRole as any);
-          setShowLogin(true);
-          setShowSignup(false);
-          setIsAuthChecking(false);
-          return;
-        }
-      }
       setUser(storedUser);
       if (storedUser.role === "shop_owner") {
         window.location.replace("/dashboard/shop");
@@ -1217,7 +1230,7 @@ export default function Home() {
     } catch {}
   }, [user]);
 
-  useEffect(() => { handleSearch("Paracetamol"); }, [handleSearch]);
+  // Initial search removed so clean landing page displays by default
   useEffect(() => { if (selectedMedicine) { fetchInventory(selectedMedicine.id); const interval = setInterval(() => fetchInventory(selectedMedicine.id), 5000); return () => clearInterval(interval); } }, [selectedMedicine, fetchInventory]);
   useEffect(() => { fetchLoyalty(); }, [fetchLoyalty]);
 
@@ -1294,6 +1307,80 @@ export default function Home() {
       setIsOrdering(false); 
     }
   };
+
+  const handleSymptomCheck = async (overrideSafetyInfo?: any) => {
+    if (!userSymptoms.trim()) return;
+    setIsAnalyzingSymptoms(true);
+    setSymptomMessage("");
+    setAiRecommendation([]);
+    setEscalatedRole(null);
+    setEscalationMessage("");
+
+    // Build safety info payload
+    const sInfo: any = {};
+    if (overrideSafetyInfo) {
+      Object.assign(sInfo, overrideSafetyInfo);
+    } else {
+      if (safetyAge) sInfo.age = parseInt(safetyAge);
+      if (safetyAllergies) sInfo.allergies = safetyAllergies;
+      sInfo.pregnancy = safetyPregnancy;
+    }
+
+    try {
+      const res = await fetch("/api/ai-consultant", {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          userEmail: user?.email || "user@example.com",
+          symptoms: userSymptoms,
+          safetyInfo: sInfo
+        }),
+      });
+      const data = await res.json();
+      setAiConsultResult(data);
+      if (data.status === "NEEDS_SAFETY_INFO") {
+        setSafetyQuestions(data.questions);
+      } else {
+        setSafetyQuestions(null);
+      }
+      if (data.advice) {
+        setSymptomMessage(data.advice);
+      }
+      // Keep legacy fallback compatibility
+      if (data.suggestedProducts) {
+        setAiRecommendation(data.suggestedProducts.map((p: any) => p.name));
+      }
+    } catch (err) {
+      console.error("AI consult failed:", err);
+    } finally {
+      setIsAnalyzingSymptoms(false);
+    }
+  };
+
+  const sendPharmacistMessage = () => {
+    if (!pharmacistInput.trim()) return;
+    const userMsg = pharmacistInput;
+    setPharmacistChat(prev => [...prev, { sender: "user", text: userMsg }]);
+    setPharmacistInput("");
+
+    setTimeout(() => {
+      let reply = "I understand. Based on these symptoms, I recommend taking plenty of fluids and rest. Let me know if you have any existing allergies before taking any medications.";
+      const msgLower = userMsg.toLowerCase();
+      if (msgLower.includes("dose") || msgLower.includes("how much") || msgLower.includes("take")) {
+        reply = "For general OTC medications like Paracetamol 500mg, the standard dose for adults is 1 tablet every 4-6 hours as needed, not exceeding 4 tablets in 24 hours. Always read the packaging label and take after meals.";
+      } else if (msgLower.includes("side effect") || msgLower.includes("harm") || msgLower.includes("safe")) {
+        reply = "Common side effects are mild, but if you experience any swelling, skin rash, or breathing difficulties, stop taking the medicine immediately and seek emergency medical help.";
+      } else if (msgLower.includes("child") || msgLower.includes("baby") || msgLower.includes("kid")) {
+        reply = "For children, dosing must be carefully calculated based on weight and age. Please consult a pediatrician before giving any adult OTC medicine to a child.";
+      } else if (msgLower.includes("allergy") || msgLower.includes("allergic")) {
+        reply = "If you have an allergy to aspirin or NSAIDs, avoid Ibuprofen or Diclofenac. Stick to Paracetamol or contact your doctor for an alternative prescription.";
+      } else if (msgLower.includes("thank") || msgLower.includes("ok") || msgLower.includes("yes")) {
+        reply = "You're welcome! Stay safe and feel free to ask any other questions. Your wellness is our priority.";
+      }
+      setPharmacistChat(prev => [...prev, { sender: "pharmacist", text: reply }]);
+    }, 800);
+  };
+
 
   useEffect(() => {
     const handleActiveOrder = async () => {
@@ -1403,7 +1490,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900 selection:bg-[#2D4A3E]/20">
       
-      {/* â”€â”€ TOP TICKER ANNOUNCEMENT BAR (Hers Style) â”€â”€ */}
+      {/* ── TOP TICKER ANNOUNCEMENT BAR (Hers Style) ── */}
       <div className="bg-[#F0F6F2] border-b border-[#E2EFE7] text-[#2D4A3E] text-xs font-semibold py-2 px-4 overflow-x-auto whitespace-nowrap scrollbar-none">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-8 text-[11px] font-medium tracking-tight">
           <span className="flex items-center gap-1.5"><Award size={13} className="text-[#2D4A3E]" /> Why MediFind? <b>over 2M subscribers</b></span>
@@ -1413,58 +1500,6 @@ export default function Home() {
           <span className="flex items-center gap-1.5"><Sparkles size={13} className="text-[#2D4A3E]" /> Personalized to your needs</span>
         </div>
       </div>
-
-      {/* â”€â”€ PERSISTENT TRACKING BAR â”€â”€ */}
-      {trackingOrder && trackingOrder.status !== "DELIVERED" && (
-        <div className="fixed top-16 left-0 right-0 z-[49] bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-xl px-4 py-3 animate-in slide-in-from-top duration-500">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
-            <div className="flex items-center gap-3 shrink-0">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}>
-                <Navigation size={20} className={trackingOrder.isEmergency ? "animate-pulse" : ""} />
-              </div>
-              <div className="hidden md:block">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Delivery Status</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-slate-900">
-                    {trackingOrder.status === "PENDING" && "Order Placed"}
-                    {trackingOrder.status === "PROCESSING" && "Packing Medicines..."}
-                    {trackingOrder.status === "CONFIRMED" && "Waiting for Rider"}
-                    {trackingOrder.status === "RIDER_ASSIGNED" && "Rider Accepted Delivery"}
-                    {trackingOrder.status === "RIDER_AT_PHARMACY" && "Rider at Pharmacy"}
-                    {trackingOrder.status === "RIDER_PICKED_UP" && "Order Picked Up"}
-                    {trackingOrder.status === "OUT_FOR_DELIVERY" && "On the Way"}
-                    {trackingOrder.status === "REACHED_CUSTOMER" && "Rider Reached Location"}
-                  </span>
-                  {trackingOrder.isEmergency && <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full border border-rose-100">PRIORITY</span>}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 max-w-xl h-2 bg-slate-100 rounded-full relative overflow-hidden hidden sm:block">
-              <div 
-                className={`absolute top-0 left-0 h-full transition-all duration-1000 ease-out ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}
-                style={{
-                  width: `${
-                    trackingOrder.status === "PENDING" ? "15%" :
-                    trackingOrder.status === "PROCESSING" ? "30%" :
-                    trackingOrder.status === "CONFIRMED" ? "45%" :
-                    trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
-                    trackingOrder.status === "RIDER_AT_PHARMACY" ? "75%" :
-                    trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" : "0%"
-                  }`
-                }}
-              />
-            </div>
-
-            <button 
-              onClick={() => setIsTrackingMode(true)}
-              className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all active:scale-95 flex items-center gap-2"
-            >
-              <Activity size={14} /> Full View
-            </button>
-          </div>
-        </div>
-      )}
 
       {showLogin && (
         <LoginModal 
@@ -1493,7 +1528,7 @@ export default function Home() {
         />
       )}
 
-      {/* â”€â”€ EMERGENCY MODE MODAL â”€â”€ */}
+      {/* ── EMERGENCY MODE MODAL ── */}
       {showEmergencyModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 relative animate-in fade-in zoom-in-95 duration-200">
@@ -1525,14 +1560,15 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ CLEAN MINIMALIST NAVBAR (Hers Style) â”€â”€ */}
+      {/* ── CLEAN MINIMALIST NAVBAR (Hers Style) ── */}
       <nav className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 sm:px-10">
-          <div className="flex justify-between items-center h-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="flex justify-between items-center h-16">
             
             {/* Logo */}
-            <a href="/" className="flex items-center gap-2">
-              <span className="text-3xl font-sans tracking-tighter text-[#1E3A2F] font-bold">medifind</span>
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
+              <span className="text-3xl font-serif tracking-tighter text-[#1E3A2F] font-bold">medifind</span>
             </a>
 
             {/* Middle Nav Links */}
@@ -1540,6 +1576,7 @@ export default function Home() {
               <a href="#categories" className="hover:text-[#1E3A2F] transition-colors">Treatments</a>
               <a href="#search" className="hover:text-[#1E3A2F] transition-colors">Search Medicines</a>
               <a href="#pharmacies" className="hover:text-[#1E3A2F] transition-colors">Compare Pharmacies</a>
+              
             </div>
 
             {/* Right Action Controls */}
@@ -1557,18 +1594,11 @@ export default function Home() {
                   {profileOpen && (
                     <>
                       <div className="fixed inset-0 z-[40]" onClick={() => setProfileOpen(false)}></div>
-                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-60 z-[50] animate-in fade-in zoom-in-95 duration-200">
-                        <div className="px-4 py-2 border-b border-slate-100">
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Signed in as</p>
-                          <p className="text-xs font-bold text-slate-800 truncate">{user.email}</p>
-                          <span className="inline-block mt-1 text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-[#E8F3ED] text-[#1E3A2F]">
-                            {user.role === "shop_owner" ? "Medical Shop Owner" : user.role === "rider" ? "Delivery Rider" : "Customer"}
-                          </span>
-                        </div>
-                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-slate-50 text-slate-700 font-bold">
-                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} My Dashboard
+                      <div className="absolute right-0 top-full mt-2 bg-white rounded-2xl shadow-xl border border-slate-100 py-2 w-52 z-[50] animate-in fade-in zoom-in-95 duration-200">
+                        <a href={user.role === "shop_owner" ? "/dashboard/shop" : user.role === "rider" ? "/dashboard/rider" : "/dashboard/user"} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-slate-700 font-bold">
+                          {user.role === "shop_owner" ? <Store size={15} /> : user.role === "rider" ? <Navigation size={15} /> : <Package size={15} />} Dashboard
                         </a>
-                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-rose-50 text-rose-600 w-full text-left font-bold border-t border-slate-100 mt-1">
+                        <button onClick={handleLogout} className="flex items-center gap-2 px-4 py-2 text-sm hover:bg-slate-50 text-rose-600 w-full text-left font-bold">
                           <LogOut size={15} /> Sign out
                         </button>
                       </div>
@@ -1579,15 +1609,9 @@ export default function Home() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   <button 
                     onClick={() => { setAuthModalRole("user"); setShowLogin(true); }} 
-                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-4 sm:px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
                   >
                     Account
-                  </button>
-                  <button 
-                    onClick={() => { setAuthModalRole("shop_owner"); setShowLogin(true); }} 
-                    className="hidden sm:flex items-center gap-1.5 bg-[#1E3A2F] text-white hover:bg-[#152a22] px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm"
-                  >
-                    <Store size={13} /> Pharmacy Partner
                   </button>
                 </div>
               )}
@@ -1609,24 +1633,24 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* â”€â”€ EDITORIAL HERO HEADLINE (Hers Style) â”€â”€ */}
-      <section className="bg-[#F6FAF7] pt-12 pb-14 px-6 md:px-12 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-5xl md:text-7xl font-sans tracking-tight text-slate-900 leading-[1.08] mb-4">
-            <span className="text-[#2D4A3E] font-normal block md:inline">Faster medicine</span>{" "}
-            <span className="font-sans font-black tracking-tight text-slate-900 block md:inline">personalized to you</span>
+      {/* ── EDITORIAL HERO HEADLINE (Hers Style) ── */}
+      <section className="bg-[#F6FAF7] pt-8 pb-10 px-6 md:px-12 text-center">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-5xl md:text-7xl font-sans font-bold tracking-tight text-slate-900 leading-[1.08] mb-4">
+            <span className="text-[#2D4A3E] font-medium block md:inline">Faster medicine</span>{" "}
+            <span className="font-sans font-extrabold tracking-tight text-slate-900 block md:inline">personalized to you</span>
           </h1>
-          <p className="text-slate-500 font-medium text-lg md:text-xl tracking-tight mb-8">
+          <p className="text-slate-500 font-medium text-base md:text-lg tracking-tight mb-7">
             Customized care starts here
           </p>
 
           {/* Search Input Box */}
           <div className="max-w-xl mx-auto relative">
-            <div id="search" className="bg-white rounded-full shadow-lg border border-slate-200 p-2 flex items-center gap-3 px-6">
+            <div id="search" className="bg-white rounded-full shadow-lg border border-slate-200 p-3 flex items-center gap-4 px-6">
               <Search size={20} className="text-slate-400 shrink-0" />
               <input
                 type="text"
-                placeholder="Search treatments, medicines, categories..."
+                placeholder="Search treatments, medicines, categories…"
                 className="w-full py-3 text-slate-800 text-sm bg-transparent outline-none placeholder-slate-400 font-medium"
                 value={searchInput}
                 onChange={e => { setSearchInput(e.target.value); setShowSuggestions(true); }}
@@ -1637,9 +1661,9 @@ export default function Home() {
               <button
                 onClick={() => { setSearchTerm(searchInput); handleSearch(searchInput); setShowSuggestions(false); }}
                 disabled={searchLoading}
-                className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all active:scale-95 shrink-0"
+                className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-4 rounded-full font-bold text-sm uppercase tracking-wider transition-all active:scale-95 shrink-0"
               >
-                {searchLoading ? "Searching..." : "Search"}
+                {searchLoading ? "Searching…" : "Search"}
               </button>
             </div>
 
@@ -1670,7 +1694,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* â”€â”€ SEARCH RESULTS & BEST PRICE SECTION â”€â”€ */}
+
+      {/* ── SEARCH RESULTS & BEST PRICE SECTION ── */}
       <main className="max-w-7xl mx-auto px-6 md:px-10 pb-24 space-y-12">
         <div className="space-y-12">
           {/* Best Price Card */}
@@ -1685,7 +1710,7 @@ export default function Home() {
                   <div>
                     <h2 className="text-2xl font-black text-slate-900 mb-1">{selectedMedicine?.name || "Medicine"}</h2>
                     <p className="text-slate-500 text-sm mb-3">{selectedMedicine?.description}</p>
-                    <div className="text-4xl font-black text-[#1E3A2F]">{bestOption.price}</div>
+                    <div className="text-4xl font-black text-[#1E3A2F]">₹{bestOption.price.toFixed(2)}</div>
                     <div className="flex items-center gap-3 mt-2 text-sm text-slate-500">
                       <span className="flex items-center gap-1 font-bold text-slate-700"><MapPin size={13} /> {bestOption.pharmacy.name}</span>
                       <span className="flex items-center gap-1"><Star size={13} className="text-amber-400 fill-amber-400" /> {bestOption.pharmacy.rating}</span>
@@ -1704,21 +1729,19 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="space-y-2 mb-4 text-sm">
-                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{subtotal}</span></div>
-                    {hasDiscount && <div className="flex justify-between text-emerald-700 font-medium"><span className="flex items-center gap-1"><Gift size={13} /> Bulk discount</span><span>-{discountAmt}</span></div>}
-                    <div className="flex justify-between font-black text-base border-t pt-2"><span>Total</span><span className="text-[#1E3A2F]">{finalTotal}</span></div>
+                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span></div>
+                    {hasDiscount && <div className="flex justify-between text-emerald-700 font-medium"><span className="flex items-center gap-1"><Gift size={13} /> Bulk discount</span><span>-₹{discountAmt.toFixed(2)}</span></div>}
+                    <div className="flex justify-between font-black text-base border-t pt-2"><span>Total</span><span className="text-[#1E3A2F]">₹{finalTotal.toFixed(2)}</span></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <button
                       onClick={() => {
-                        setRouteModalPharmacy(bestOption.pharmacy);
-                        setRouteModalMedicine(selectedMedicine);
-                        setRouteModalQuantity(quantity);
-                        setIsRouteModalOpen(true);
+                        addToCart(bestOption, selectedMedicine, quantity);
+                        setIsCartOpen(true);
                       }}
-                      className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-[#1E3A2F] py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full bg-white hover:bg-[#1E3A2F] hover:text-white border-2 border-[#1E3A2F] text-[#1E3A2F] py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <MapIcon size={16} /> View Route & Map
+                      <ArrowRight size={16} /> Buy Now
                     </button>
                     <button onClick={() => addToCart(bestOption, selectedMedicine, quantity)}
                       className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg">
@@ -1731,7 +1754,7 @@ export default function Home() {
           ) : searchLoading ? (
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-20 text-center">
               <Search size={40} className="mx-auto mb-4 text-slate-300 animate-spin" />
-              <p className="text-slate-400 font-medium">Searching...</p>
+              <p className="text-slate-400 font-medium">Searching…</p>
             </div>
           ) : medicines.length === 0 && searchTerm ? (
             <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-20 text-center">
@@ -1741,7 +1764,7 @@ export default function Home() {
             </div>
           ) : null}
 
-          {/* â”€â”€ ALL AVAILABLE MEDICAL SHOPS COMPARISON (Requirements 2, 7, 8, 10) â”€â”€ */}
+          {/* ── ALL AVAILABLE MEDICAL SHOPS COMPARISON (Requirements 2, 7, 8, 10) ── */}
           {selectedMedicine && displayPharmacies.length > 0 && (
             <div id="pharmacies" className="bg-white rounded-[32px] p-6 sm:p-8 shadow-xl border border-slate-100 space-y-6 animate-in fade-in duration-500">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
@@ -1818,7 +1841,7 @@ export default function Home() {
                         <div className="flex justify-between items-center py-3 border-y border-slate-100 mb-4">
                           <div>
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Unit Price</span>
-                            <span className="text-2xl font-black text-[#1E3A2F]">{p.price}</span>
+                            <span className="text-2xl font-black text-[#1E3A2F]">₹{p.price.toFixed(2)}</span>
                           </div>
                           <div className="text-right">
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${p.isAvailable === false ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-700"}`}>
@@ -1835,14 +1858,18 @@ export default function Home() {
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <button
                           onClick={() => {
-                            setRouteModalPharmacy(p);
-                            setRouteModalMedicine(selectedMedicine);
-                            setRouteModalQuantity(quantity);
-                            setIsRouteModalOpen(true);
+                            const inv = inventory.find((i: any) => i.pharmacy?.name === p.name) || {
+                              id: p.inventoryId || `temp-${p.name}`,
+                              price: p.price,
+                              stock: p.stock || 50,
+                              pharmacy: p
+                            };
+                            addToCart(inv, selectedMedicine, quantity);
+                            setIsCartOpen(true);
                           }}
-                          className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                          className="bg-white hover:bg-[#1E3A2F] hover:text-white border-2 border-[#1E3A2F] text-[#1E3A2F] py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
                         >
-                          <MapIcon size={13} className="text-[#1E3A2F]" /> View Route
+                          <ArrowRight size={13} /> Buy Now
                         </button>
                         <button
                           onClick={() => {
@@ -1856,7 +1883,7 @@ export default function Home() {
                           }}
                           className="bg-[#1E3A2F] hover:bg-[#152a22] text-white py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                         >
-                          <ShoppingCart size={13} /> Order Now
+                          <ShoppingCart size={13} /> Add to Cart
                         </button>
                       </div>
                     </div>
@@ -1899,7 +1926,7 @@ export default function Home() {
                       <div className="grid grid-cols-2 gap-4 mb-6">
                         <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Starting From</p>
-                          <p className="text-xl font-black text-[#1E3A2F]">{bestInv?.price == null ? " --" : bestInv.price}</p>
+                          <p className="text-xl font-black text-[#1E3A2F]">₹{bestInv?.price?.toFixed(2) || " --"}</p>
                         </div>
                         <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100">
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Available In</p>
@@ -1935,12 +1962,12 @@ export default function Home() {
           )}
         </div>
 
-        {/* â”€â”€ CARE BANNER â”€â”€ */}
+        {/* ── CARE BANNER ── */}
         <div className="bg-[#6B8C9F] rounded-[36px] p-10 md:p-16 text-white text-center relative overflow-hidden shadow-xl">
           <span className="bg-[#E76F51] text-white px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest inline-block mb-4">
             Hyperlocal Pharmacy Delivery | 24/7
           </span>
-          <h2 className="text-4xl md:text-6xl font-sans tracking-tight mb-4 leading-tight">
+          <h2 className="text-4xl md:text-6xl font-serif tracking-tight mb-4 leading-tight">
             Care that evolves with you
           </h2>
           <p className="text-slate-100 max-w-lg mx-auto text-base md:text-lg font-medium mb-8">
@@ -1954,7 +1981,7 @@ export default function Home() {
           </button>
         </div>
 
-        {/* â”€â”€ VERIFIED NEIGHBORHOOD PHARMACIES (Clean, Contextual, No Permanent Map) â”€â”€ */}
+        {/* ── VERIFIED NEIGHBORHOOD PHARMACIES (Clean, Contextual, No Permanent Map) ── */}
         {!selectedMedicine && (
           <div id="pharmacies" className="bg-white rounded-[32px] p-6 sm:p-10 shadow-lg border border-slate-100 space-y-6">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 border-b border-slate-100 pb-5">
@@ -2014,7 +2041,7 @@ export default function Home() {
         )}
       </main>
 
-      {/* â”€â”€ CART SIDEBAR â”€â”€ */}
+      {/* ── CART SIDEBAR ── */}
       {isCartOpen && (
         <div className="fixed inset-0 z-[100]">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setIsCartOpen(false)} />
@@ -2040,8 +2067,8 @@ export default function Home() {
                     <h4 className="font-bold text-xs text-slate-900 truncate">{item.medicine?.name}</h4>
                     <p className="text-[11px] text-slate-400">{item.inventory.pharmacy?.name}</p>
                     <div className="flex justify-between mt-1">
-                      <span className="text-xs font-bold text-[#1E3A2F]">{item.inventory.price} × {item.quantity}</span>
-                      <span className="text-xs font-black">{item.inventory.price * item.quantity}</span>
+                      <span className="text-xs font-bold text-[#1E3A2F]">₹{item.inventory.price.toFixed(2)} × {item.quantity}</span>
+                      <span className="text-xs font-black">₹{(item.inventory.price * item.quantity).toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -2131,7 +2158,7 @@ export default function Home() {
                           className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F] font-medium"
                         >
                           {userAddresses.map(addr => (
-                            <option key={addr.id} value={addr.id}>{addr.isDefault ? '' : ''}{addr.label}: {addr.fullName ? `${addr.fullName}, ` : ''}{addr.address}</option>
+                            <option key={addr.id} value={addr.id}>{addr.isDefault ? '★ ' : ''}{addr.label}: {addr.fullName ? `${addr.fullName}, ` : ''}{addr.address}</option>
                           ))}
                         </select>
                         {/* Show selected address details */}
@@ -2179,17 +2206,17 @@ export default function Home() {
 
                   {/* Order Summary */}
                   <div className="text-sm space-y-1.5 pt-2 border-t border-slate-100 pb-2">
-                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>{cartSubtotal}</span></div>
-                    {cartDiscount > 0 && <div className="flex justify-between text-emerald-700 font-medium"><span>Bulk discount (10%)</span><span>-{cartDiscount}</span></div>}
+                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₹{cartSubtotal.toFixed(2)}</span></div>
+                    {cartDiscount > 0 && <div className="flex justify-between text-emerald-700 font-medium"><span>Bulk discount (10%)</span><span>-₹{cartDiscount.toFixed(2)}</span></div>}
                     {isEmergencyMode && (
                       <div className="flex justify-between text-rose-600 font-bold">
                         <span className="flex items-center gap-1"><Navigation size={13} /> Emergency Delivery Fee</span>
-                        <span>+{emergencyFee}</span>
+                        <span>+₹{emergencyFee.toFixed(2)}</span>
                       </div>
                     )}
                     <div className="flex justify-between font-black text-base border-t pt-2">
                       <span>Total</span>
-                      <span className={isEmergencyMode ? "text-rose-600" : "text-[#1E3A2F]"}>{cartFinalWithEmergency}</span>
+                      <span className={isEmergencyMode ? "text-rose-600" : "text-[#1E3A2F]"}>₹{cartFinalWithEmergency.toFixed(2)}</span>
                     </div>
                   </div>
                 </div>
@@ -2205,7 +2232,7 @@ export default function Home() {
                   disabled={isOrdering}
                   className={`w-full ${isEmergencyMode ? "bg-rose-500 hover:bg-rose-600" : "bg-[#1E3A2F] hover:bg-[#152a22]"} text-white py-3.5 rounded-xl font-bold transition-all active:scale-95 flex items-center justify-center gap-2 text-sm shadow-lg disabled:opacity-60`}
                 >
-                  {isOrdering ? "Placing order..." : <>{isEmergencyMode ? <Activity size={16} /> : <ShoppingCart size={16} />} Checkout {cartFinalWithEmergency}</>}
+                  {isOrdering ? "Placing order…" : <>{isEmergencyMode ? <Activity size={16} /> : <ShoppingCart size={16} />} Checkout — ₹{cartFinalWithEmergency.toFixed(2)}</>}
                 </button>
               </div>
             )}
@@ -2213,14 +2240,14 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ ORDER SUCCESS SCREEN â”€â”€ */}
+      {/* ── ORDER SUCCESS SCREEN ── */}
       {showOrderSuccess && (
         <div className="fixed inset-0 z-[200] bg-white flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-300">
           <div className="max-w-md w-full">
             <div className="w-24 h-24 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8 animate-bounce">
               <CheckCircle size={48} />
             </div>
-            <h1 className="text-4xl md:text-5xl font-sans text-slate-900 mb-4">Order Confirmed!</h1>
+            <h1 className="text-4xl md:text-5xl font-serif text-slate-900 mb-4">Order Confirmed!</h1>
             <p className="text-slate-500 mb-10 text-base">
               Your order has been placed successfully. You can track delivery progress in real time.
             </p>
@@ -2248,7 +2275,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ ORDER TRACKING MODAL â”€â”€ */}
+      {/* ── ORDER TRACKING MODAL ── */}
       {isTrackingMode && trackingOrder && (
         <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden overflow-y-auto max-h-[90vh]">
@@ -2343,7 +2370,7 @@ export default function Home() {
                       <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center text-white"><Activity size={20} /></div>
                       <div>
                         <p className="font-bold text-sm">Rider Assigned</p>
-                        <p className="text-[10px] text-slate-300">Rating: 4.8</p>
+                        <p className="text-[10px] text-slate-300">Rating: 4.8 ★</p>
                       </div>
                     </div>
                   </div>
@@ -2359,11 +2386,12 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ FOOTER â”€â”€ */}
+      {/* ── FOOTER ── */}
       <footer className="bg-[#1E3A2F] text-white py-12">
         <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <span className="text-3xl font-sans font-bold tracking-tighter">medifind</span>
+          <div className="flex items-center justify-center gap-2.5 mb-4">
+            <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl border border-white/20 shadow-sm" />
+            <span className="text-3xl font-serif font-bold tracking-tighter">medifind</span>
           </div>
           <p className="text-slate-300 text-sm max-w-md mx-auto mb-6">
             Connecting you to genuine medicines, local pharmacies, and instant delivery.
@@ -2375,7 +2403,7 @@ export default function Home() {
             <a href="#" className="hover:text-white transition-colors">Contact Support</a>
           </div>
 
-          {/* â”€â”€ FOOTER BOTTOM ATTRIBUTION â”€â”€ */}
+          {/* ── FOOTER BOTTOM ATTRIBUTION ── */}
           <div className="mt-10 pt-8 border-t border-emerald-800/60 flex flex-col items-center justify-center gap-3 text-center">
             <div className="inline-flex items-center gap-2.5 bg-[#152a22] hover:bg-[#0f1f19] border border-emerald-700/50 hover:border-cyan-500/50 px-5 py-2.5 rounded-full transition-all duration-300 shadow-md group">
               <span className="text-slate-300 text-xs font-medium">Made by</span>
@@ -2398,7 +2426,7 @@ export default function Home() {
         </div>
       </footer>
 
-      {/* â”€â”€ ADDRESS MODAL â”€â”€ */}
+      {/* ── ADDRESS MODAL ── */}
       {showAddressModal && (
         <div className="fixed inset-0 z-[1500] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md relative animate-in fade-in zoom-in-95 duration-200 max-h-[92vh] flex flex-col">
@@ -2453,12 +2481,6 @@ export default function Home() {
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
                 <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? 'border-rose-400' : 'border-slate-200'}`} placeholder="e.g., MG Road, Andheri West" />
                 {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
-              </div>
-
-              {/* Area / Locality (optional) */}
-              <div>
-                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Area / Locality <span className="text-slate-300">(Optional)</span></label>
-                <input value={addressForm.area} onChange={e => setAddressForm(p => ({ ...p, area: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="e.g. Andheri East, Bandra West" />
               </div>
 
               {/* Landmark (optional) */}
@@ -2521,7 +2543,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ DELETE ADDRESS CONFIRM â”€â”€ */}
+      {/* ── DELETE ADDRESS CONFIRM ── */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-sm">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs p-6 text-center animate-in fade-in zoom-in-95 duration-150">
@@ -2536,7 +2558,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* â”€â”€ CONTEXTUAL ORDER ROUTE MAP MODAL (Requirements 3, 4, 5, 6, 7, 8, 9, 10, 11) â”€â”€ */}
+      {/* ── CONTEXTUAL ORDER ROUTE MAP MODAL (Requirements 3, 4, 5, 6, 7, 8, 9, 10, 11) ── */}
       <OrderRouteMapModal
         isOpen={isRouteModalOpen}
         onClose={() => setIsRouteModalOpen(false)}

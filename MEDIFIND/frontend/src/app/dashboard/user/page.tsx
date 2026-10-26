@@ -6,6 +6,8 @@ import {
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles, Truck, AlertCircle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
+import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
+import { Button } from "@/components/ui/Button";
 
 import dynamic from "next/dynamic";
 
@@ -256,8 +258,9 @@ function TrackingMap({ pharmacyCoord, customerCoord, riderCoord }: { pharmacyCoo
     <div className="w-full h-64 sm:h-72 rounded-[24px] overflow-hidden border border-[#E2EFE7] shadow-inner relative z-0">
       <MapContainer center={[centerLat, centerLng]} zoom={13} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
         <Marker position={[pharmacyCoord.lat, pharmacyCoord.lng]} icon={shopIcon}>
           <Popup>Pharmacy Pickup</Popup>
@@ -768,7 +771,7 @@ export default function UserDashboard() {
 
   if (roleMismatchUser) {
     return (
-      <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center p-6 text-center">
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
           <div className="w-16 h-16 bg-emerald-50 text-[#1E3A2F] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#CDE3D5]">
             <User size={32} />
@@ -802,7 +805,7 @@ export default function UserDashboard() {
   }
 
   if (authLoading || !user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center">
       <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
         <HeartPulse size={32} />
       </div>
@@ -811,13 +814,14 @@ export default function UserDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F0F8F4] font-sans text-slate-900">
       
       {/* Top Nav (Hers Aesthetic) */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-[#E2EFE7] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a href="/" className="flex items-center gap-2">
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
               <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>

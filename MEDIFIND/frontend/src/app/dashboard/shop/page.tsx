@@ -10,6 +10,8 @@ import {
   HelpCircle, Info, Filter, Layers, CheckSquare, Sparkles, FileText, AlertTriangle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
+import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
+import { Button } from "@/components/ui/Button";
 
 type AuthUser = { id: string; email: string; name: string; role: string };
 
@@ -875,7 +877,7 @@ export default function ShopDashboard() {
 
   if (roleMismatchUser) {
     return (
-      <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center p-6 text-center">
         <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
           <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200">
             <Store size={32} />
@@ -890,7 +892,7 @@ export default function ShopDashboard() {
                 clearAuthSession();
                 window.location.replace("/?auth=login&role=shop_owner");
               }}
-              className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+              className="w-full bg-[#078B5A] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
             >
               Sign In as Medical Shop Owner
             </button>
@@ -909,8 +911,8 @@ export default function ShopDashboard() {
   }
 
   if (authLoading || !user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
-      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center">
+      <div className="bg-[#078B5A] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
         <HeartPulse size={32} />
       </div>
       <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Shop Owner Authorization...</p>
@@ -918,12 +920,13 @@ export default function ShopDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F0F8F4] font-sans text-slate-900">
       {/* Top Nav (Hers Aesthetic) */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-[#E2EFE7] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a href="/" className="flex items-center gap-2">
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
               <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>
@@ -988,7 +991,7 @@ export default function ShopDashboard() {
             <button 
               key={t.id} 
               onClick={() => setTab(t.id as any)}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${tab === t.id ? "bg-[#1E3A2F] text-white shadow-md" : "text-slate-600 hover:text-slate-900"}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${tab === t.id ? "bg-[#078B5A] text-white shadow-md" : "text-slate-600 hover:text-slate-900"}`}
             >
               <t.icon size={15} /> {t.label}
             </button>
@@ -1073,7 +1076,7 @@ export default function ShopDashboard() {
                       </div>
                       <button
                         onClick={() => setReassignModalOrder(order)}
-                        className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
+                        className="text-[10px] font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                       >
                         <UserCheck size={11} /> Assign Another Rider
                       </button>
@@ -1084,7 +1087,7 @@ export default function ShopDashboard() {
                       {order.status !== "DELIVERED" && (
                         <button
                           onClick={() => setReassignModalOrder(order)}
-                          className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
+                          className="text-[10px] font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                         >
                           <UserCheck size={11} /> Assign Rider
                         </button>
@@ -1107,7 +1110,7 @@ export default function ShopDashboard() {
                     order.status === "PENDING" ? (
                       <button
                         onClick={() => updateOrderStatus(order.realId || order.id, "PROCESSING")}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 ${order.isEmergency ? "bg-rose-600 text-white" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white"}`}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 ${order.isEmergency ? "bg-rose-600 text-white" : "bg-[#078B5A] hover:bg-[#152a22] text-white"}`}
                       >
                         <CheckCircle size={14} /> Accept & Prepare
                       </button>
@@ -1180,7 +1183,7 @@ export default function ShopDashboard() {
                     setImportSummary(null);
                     setImportError(null);
                   }}
-                  className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                  className="flex items-center gap-2 bg-[#078B5A] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
                 >
                   <FileSpreadsheet size={15} className="text-emerald-300" /> Import Inventory
                   <span className="text-[10px] bg-emerald-700/80 text-emerald-200 px-2 py-0.5 rounded-full font-bold">Excel / CSV</span>
@@ -1252,7 +1255,7 @@ export default function ShopDashboard() {
                           <div className="flex items-center gap-2">
                             {editingStock === med.id ? (
                               <div className="flex gap-2">
-                                <button onClick={() => handleSaveStock(med.id)} className="bg-[#1E3A2F] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
+                                <button onClick={() => handleSaveStock(med.id)} className="bg-[#078B5A] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
                                 <button onClick={() => setEditingStock(null)} className="bg-slate-200 text-slate-600 text-xs px-3 py-1.5 rounded-lg font-bold">Cancel</button>
                               </div>
                             ) : (
@@ -1428,7 +1431,7 @@ export default function ShopDashboard() {
                 </button>
               </div>
               <button onClick={handleSaveSettings} disabled={settingsSaving}
-                className="mt-6 w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
+                className="mt-6 w-full bg-[#078B5A] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
                 <Save size={16} /> {settingsSaving ? "Saving..." : "Save Settings"}
               </button>
             </div>
@@ -1477,7 +1480,7 @@ export default function ShopDashboard() {
                       disabled={!!assigningRiderId || r.isBusy}
                       title={r.isBusy ? "Rider is currently busy with another delivery" : "Assign this rider"}
                       className={`text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider ${
-                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white disabled:opacity-50"
+                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#078B5A] hover:bg-[#152a22] text-white disabled:opacity-50"
                       }`}
                     >
                       {assigningRiderId === r.id ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
@@ -1528,7 +1531,7 @@ export default function ShopDashboard() {
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="submit" className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all">Add to Stock</button>
+                <button type="submit" className="flex-1 bg-[#078B5A] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all">Add to Stock</button>
                 <button type="button" onClick={() => setShowAddModal(false)} className="bg-slate-100 text-slate-600 font-bold px-6 py-3.5 rounded-full text-xs uppercase tracking-wider">Cancel</button>
               </div>
             </form>
@@ -1571,7 +1574,7 @@ export default function ShopDashboard() {
                   key={s.step}
                   className={`py-2 px-3 rounded-xl text-center transition-all ${
                     importStep === s.step
-                      ? "bg-[#1E3A2F] text-white shadow-sm"
+                      ? "bg-[#078B5A] text-white shadow-sm"
                       : importStep > s.step
                       ? "bg-[#E8F3ED] text-[#1E3A2F]"
                       : "bg-slate-50 text-slate-400"
@@ -1603,7 +1606,7 @@ export default function ShopDashboard() {
                         <button
                           type="button"
                           onClick={downloadSampleExcel}
-                          className="flex items-center gap-1.5 text-xs font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-2.5 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider"
+                          className="flex items-center gap-1.5 text-xs font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-2.5 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider"
                         >
                           <Download size={13} /> Excel (.xlsx)
                         </button>
@@ -1735,7 +1738,7 @@ export default function ShopDashboard() {
                       <button
                         type="button"
                         onClick={() => setFilterTab("all")}
-                        className={`px-3 py-1.5 rounded-full transition-all ${filterTab === "all" ? "bg-[#1E3A2F] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100"}`}
+                        className={`px-3 py-1.5 rounded-full transition-all ${filterTab === "all" ? "bg-[#078B5A] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100"}`}
                       >
                         All Records ({parsedRecords.length})
                       </button>
@@ -1905,7 +1908,7 @@ export default function ShopDashboard() {
                                       <button
                                         type="button"
                                         onClick={() => handleSaveInlineEdit(rec.id)}
-                                        className="bg-[#1E3A2F] text-white px-2.5 py-1 rounded-md text-[11px] font-bold mr-1"
+                                        className="bg-[#078B5A] text-white px-2.5 py-1 rounded-md text-[11px] font-bold mr-1"
                                       >
                                         Save
                                       </button>
@@ -1980,7 +1983,7 @@ export default function ShopDashboard() {
               {importStep === 4 && importSummary && (
                 <div className="space-y-5 py-4">
                   <div className="bg-[#E8F3ED] border border-[#CDE3D5] rounded-3xl p-6 text-center">
-                    <div className="w-16 h-16 bg-[#1E3A2F] text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                    <div className="w-16 h-16 bg-[#078B5A] text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
                       <Check size={32} />
                     </div>
                     <h4 className="text-2xl font-sans font-bold text-slate-900">Inventory Import Complete!</h4>
@@ -2050,7 +2053,7 @@ export default function ShopDashboard() {
                   <button
                     type="button"
                     onClick={() => setShowImportModal(false)}
-                    className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95"
+                    className="bg-[#078B5A] hover:bg-[#152a22] text-white px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95"
                   >
                     Done & View Inventory
                   </button>
@@ -2072,7 +2075,7 @@ export default function ShopDashboard() {
                           generateAndValidateRecords(columnMapping, rawRows);
                           setImportStep(3);
                         }}
-                        className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
+                        className="bg-[#078B5A] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
                       >
                         Continue to Preview <ArrowRight size={13} />
                       </button>
@@ -2083,7 +2086,7 @@ export default function ShopDashboard() {
                         type="button"
                         disabled={importLoading || parsedRecords.filter(r => r.status === "valid" || r.status === "update").length === 0}
                         onClick={handleExecuteImport}
-                        className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-2"
+                        className="bg-[#078B5A] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-2"
                       >
                         {importLoading ? (
                           <>Processing Import...</>

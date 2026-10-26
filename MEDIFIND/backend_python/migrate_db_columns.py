@@ -48,6 +48,9 @@ def migrate():
             ('vehicleType', 'VARCHAR DEFAULT \'Motorcycle\''),
             ('latitude', 'DOUBLE PRECISION'),
             ('longitude', 'DOUBLE PRECISION'),
+            ('googleId', 'VARCHAR UNIQUE'),
+            ('authProvider', 'VARCHAR DEFAULT \'local\''),
+            ('avatar', 'VARCHAR'),
             ('createdAt', 'VARCHAR'),
             ('updatedAt', 'VARCHAR')
         ]
