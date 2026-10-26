@@ -57,50 +57,63 @@ def update_shop_inventory(payload: schemas.InventoryActionPayload, db: Session =
     action = payload.action
     pharmacy_id = payload.pharmacyId
     
-    if action == "add_medicine":
+    if action in ["add_medicine", "add"]:
         med_name = payload.medicineName
         category = payload.category
         price = payload.price or 0.0
         stock = payload.stock or 0
-            
-        if not med_name:
-            raise HTTPException(status_code=400, detail="Medicine name is required")
 
-        medicine = db.query(models.Medicine).filter(models.Medicine.name.ilike(f"%{med_name}%")).first()
+        medicine = None
+        if payload.medicineId:
+            medicine = db.query(models.Medicine).filter(models.Medicine.id == payload.medicineId).first()
+        elif med_name:
+            medicine = db.query(models.Medicine).filter(models.Medicine.name.ilike(f"%{med_name}%")).first()
+
+        if not medicine and not med_name:
+            raise HTTPException(status_code=400, detail="Medicine name or medicineId is required")
+
         if not medicine:
             medicine = models.Medicine(id=generate_cuid(), name=med_name, category=category, createdAt=current_iso_time(), updatedAt=current_iso_time())
             db.add(medicine)
             db.flush()
 
         # Check if already exists in this pharmacy's inventory
-        exists = db.query(models.Inventory).filter(models.Inventory.medicineId == medicine.id, models.Inventory.pharmacyId == pharmacy_id).first()
-        if exists:
-            exists.stock += stock
-            exists.price = price
+        inv = db.query(models.Inventory).filter(models.Inventory.medicineId == medicine.id, models.Inventory.pharmacyId == pharmacy_id).first()
+        if inv:
+            inv.stock = (inv.stock or 0) + stock
+            inv.price = price
         else:
             inv = models.Inventory(id=generate_cuid(), medicineId=medicine.id, pharmacyId=pharmacy_id, price=price, stock=stock, createdAt=current_iso_time(), updatedAt=current_iso_time())
             db.add(inv)
         db.commit()
-        return {"success": True}
+        db.refresh(inv)
+        return {"success": True, "inventory": {"id": inv.id, "medicineId": inv.medicineId, "price": inv.price, "stock": inv.stock}}
 
-    elif action == "update_stock":
-        med_id = payload.medicineId
-        if not med_id:
-            raise HTTPException(status_code=400, detail="Medicine ID is required")
-        inv = db.query(models.Inventory).filter(models.Inventory.medicineId == med_id, models.Inventory.pharmacyId == pharmacy_id).first()
+    elif action in ["update_stock", "update"]:
+        inv = None
+        if payload.inventoryId:
+            inv = db.query(models.Inventory).filter(models.Inventory.id == payload.inventoryId, models.Inventory.pharmacyId == pharmacy_id).first()
+            if not inv:
+                inv = db.query(models.Inventory).filter(models.Inventory.id == payload.inventoryId).first()
+        if not inv and payload.medicineId:
+            inv = db.query(models.Inventory).filter(models.Inventory.medicineId == payload.medicineId, models.Inventory.pharmacyId == pharmacy_id).first()
+
         if inv:
             if payload.price is not None: 
                 inv.price = payload.price
             if payload.stock is not None: 
                 inv.stock = payload.stock
             db.commit()
+            return {"success": True, "inventory": {"id": inv.id, "price": inv.price, "stock": inv.stock}}
         return {"success": True}
 
-    elif action == "delete_medicine":
-        med_id = payload.medicineId
-        if not med_id:
-            raise HTTPException(status_code=400, detail="Medicine ID is required")
-        inv = db.query(models.Inventory).filter(models.Inventory.medicineId == med_id, models.Inventory.pharmacyId == pharmacy_id).first()
+    elif action in ["delete_medicine", "delete"]:
+        inv = None
+        if payload.inventoryId:
+            inv = db.query(models.Inventory).filter(models.Inventory.id == payload.inventoryId).first()
+        if not inv and payload.medicineId:
+            inv = db.query(models.Inventory).filter(models.Inventory.medicineId == payload.medicineId, models.Inventory.pharmacyId == pharmacy_id).first()
+
         if inv:
             db.delete(inv)
             db.commit()

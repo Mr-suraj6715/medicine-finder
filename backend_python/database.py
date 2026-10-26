@@ -23,13 +23,15 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOCAL_SQLITE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'frontend', 'prisma', 'dev.db')}"
 
 try:
-    connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {"connect_timeout": 2}
-    test_engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args=connect_args,
-        pool_pre_ping=True,
-        pool_recycle=300,
-    )
+    engine_kwargs = {
+        "connect_args": connect_args,
+        "pool_pre_ping": True,
+        "pool_recycle": 300,
+    }
+    if not SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
+        engine_kwargs["pool_size"] = 5
+        engine_kwargs["max_overflow"] = 5
+    test_engine = create_engine(SQLALCHEMY_DATABASE_URL, **engine_kwargs)
     # Test connection
     with test_engine.connect() as conn:
         pass

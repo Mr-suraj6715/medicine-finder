@@ -157,6 +157,7 @@ def get_rider_orders(riderId: str = Query(...), db: Session = Depends(get_db), c
     }
 
 @router.post("/orders")
+@router.post("/status")
 def update_rider_order_status(req: schemas.OrderStatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "rider":
         raise HTTPException(status_code=403, detail="Forbidden: Only riders can update order status")
@@ -251,6 +252,7 @@ def update_rider_order_status(req: schemas.OrderStatusUpdate, db: Session = Depe
     return {"success": True, "status": order.status}
 
 @router.put("/orders")
+@router.post("/accept")
 def accept_or_reject_order(req: schemas.RiderAcceptOrder, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     """
     Rider accepts an order (from open pool OR from shopkeeper-direct-assign).

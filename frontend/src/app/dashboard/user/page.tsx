@@ -6,6 +6,8 @@ import {
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles, Truck, AlertCircle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
+import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
+import { Button } from "@/components/ui/Button";
 
 import dynamic from "next/dynamic";
 
@@ -25,6 +27,28 @@ const STATUS_COLORS: Record<string, string> = {
   DELIVERED: "bg-[#E8F3ED] text-[#1E3A2F] border-[#CDE3D5]",
 };
 
+function formatApiError(detail: any, fallback: string = "Request failed"): string {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item: any) => {
+        if (typeof item === "string") return item;
+        if (item && item.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+          const cleanMsg = item.msg.replace(/^Value error,\s*/i, "");
+          return field && field !== "body" ? `${field}: ${cleanMsg}` : cleanMsg;
+        }
+        return JSON.stringify(item);
+      })
+      .join(". ");
+  }
+  if (typeof detail === "object") {
+    return detail.message || detail.msg || detail.error || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title: string; zoom: number }) {
   const [icon, setIcon] = useState<any>(null);
   useEffect(() => {
@@ -40,7 +64,10 @@ function LeafletMap({ lat, lng, title, zoom }: { lat: number; lng: number; title
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden">
       <MapContainer center={[lat, lng]} zoom={zoom} scrollWheelZoom={false} style={{ height: "100%", width: "100%" }}>
-        <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+        <TileLayer
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
         <Marker position={[lat, lng]} icon={icon}><Popup>{title}</Popup></Marker>
       </MapContainer>
     </div>
@@ -92,7 +119,7 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-xs font-black text-slate-800">×{item.quantity || item.qty || 1}</p>
-                    <p className="text-[11px] font-bold text-[#1E3A2F]">₹{((item.priceAtTime ?? item.price ?? 0) * (item.quantity || item.qty || 1)).toFixed(2)}</p>
+                    <p className="text-[11px] font-bold text-[#1E3A2F]">{(item.priceAtTime ?? item.price ?? 0) * (item.quantity || item.qty || 1)}</p>
                   </div>
                 </div>
               ))}
@@ -105,23 +132,23 @@ function OrderDetailsModal({ order, onClose }: { order: any; onClose: () => void
             <div className="space-y-2 text-sm">
               <div className="flex justify-between text-slate-600">
                 <span>Subtotal</span>
-                <span>₹{((order.totalAmount || 0) - (order.surgeFee || 0) + (order.discountApplied || 0)).toFixed(2)}</span>
+                <span>{(order.totalAmount || 0) - (order.surgeFee || 0) + (order.discountApplied || 0)}</span>
               </div>
               {(order.discountApplied || 0) > 0 && (
                 <div className="flex justify-between text-emerald-700 font-medium">
                   <span className="flex items-center gap-1"><Gift size={12} /> Bulk Discount</span>
-                  <span>-₹{(order.discountApplied || 0).toFixed(2)}</span>
+                  <span>-{order.discountApplied || 0}</span>
                 </div>
               )}
               {order.isEmergency && (order.surgeFee || 0) > 0 && (
                 <div className="flex justify-between text-rose-500 font-medium">
                   <span>Emergency Surge Fee</span>
-                  <span>+₹{(order.surgeFee || 0).toFixed(2)}</span>
+                  <span>+{order.surgeFee || 0}</span>
                 </div>
               )}
               <div className="flex justify-between font-black text-base border-t border-[#D5E6DC] pt-2 mt-1">
                 <span>Total Paid</span>
-                <span className="text-[#1E3A2F]">₹{(order.totalAmount || 0).toFixed(2)}</span>
+                <span className="text-[#1E3A2F]">{order.totalAmount || 0}</span>
               </div>
             </div>
           </div>
@@ -231,8 +258,10 @@ function TrackingMap({ pharmacyCoord, customerCoord, riderCoord }: { pharmacyCoo
     <div className="w-full h-64 sm:h-72 rounded-[24px] overflow-hidden border border-[#E2EFE7] shadow-inner relative z-0">
       <MapContainer center={[centerLat, centerLng]} zoom={13} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url={process.env.NEXT_PUBLIC_CARTO_API_KEY ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${process.env.NEXT_PUBLIC_CARTO_API_KEY}` : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"}
+          subdomains="abcd"
+          maxZoom={20}
         />
         <Marker position={[pharmacyCoord.lat, pharmacyCoord.lng]} icon={shopIcon}>
           <Popup>Pharmacy Pickup</Popup>
@@ -308,7 +337,7 @@ function LiveTrackingModal({ order, onClose }: { order: any; onClose: () => void
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping inline-block" />
               <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Live Delivery Tracking</p>
             </div>
-            <h2 className="text-xl sm:text-2xl font-black font-serif tracking-tight">{order.trackingNumber || order.id}</h2>
+            <h2 className="text-xl sm:text-2xl font-black font-sans tracking-tight">{order.trackingNumber || order.id}</h2>
             <p className="text-xs text-white/70 mt-0.5">Est. Delivery: <strong>Today, 30-45 mins</strong></p>
           </div>
           <button onClick={onClose} className="p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
@@ -373,7 +402,7 @@ function LiveTrackingModal({ order, onClose }: { order: any; onClose: () => void
               {order.rider ? (
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-2xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center font-bold font-serif text-lg">
+                    <div className="w-11 h-11 rounded-2xl bg-[#E8F3ED] text-[#1E3A2F] flex items-center justify-center font-bold font-sans text-lg">
                       {order.rider.name?.[0]?.toUpperCase() || "R"}
                     </div>
                     <div>
@@ -451,7 +480,7 @@ function LiveTrackingModal({ order, onClose }: { order: any; onClose: () => void
 export default function UserDashboard() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
-  const [tab, setTab] = useState<"orders" | "profile" | "health">("orders");
+  const [tab, setTab] = useState<"orders" | "profile">("orders");
   const [orders, setOrders] = useState<any[]>([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
   const [loyaltyPoints, setLoyaltyPoints] = useState(0);
@@ -463,6 +492,7 @@ export default function UserDashboard() {
     phone: "",
     houseNumber: "",
     street: "",
+    area: "",
     landmark: "",
     city: "Mumbai",
     state: "Maharashtra",
@@ -496,6 +526,7 @@ export default function UserDashboard() {
       phone: user?.phone || "",
       houseNumber: "",
       street: "",
+      area: "",
       landmark: "",
       city: "Mumbai",
       state: "Maharashtra",
@@ -512,10 +543,8 @@ export default function UserDashboard() {
     if (!addressForm.fullName.trim() || addressForm.fullName.trim().length < 2) {
       errs.fullName = "Full name is required (min 2 characters)";
     }
-    let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-    if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-    else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-    else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+    const rawPhone = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+    const cleanPhone = rawPhone.startsWith("+91") ? rawPhone.slice(3) : rawPhone.startsWith("91") && rawPhone.length === 12 ? rawPhone.slice(2) : rawPhone.startsWith("0") && rawPhone.length === 11 ? rawPhone.slice(1) : rawPhone;
     if (!cleanPhone || !/^[6-9]\d{9}$/.test(cleanPhone)) {
       errs.phone = "Enter a valid 10-digit Indian mobile number (e.g. 9820011221 or +91 98200 11221)";
     }
@@ -561,10 +590,8 @@ export default function UserDashboard() {
       const isEditing = !!editingAddress;
       const url = isEditing ? `/api/user/address?id=${editingAddress!.id}` : "/api/user/address";
       const method = isEditing ? "PUT" : "POST";
-      let cleanPhone = addressForm.phone.replace(/[\s\-\(\)\+]/g, "");
-      if (cleanPhone.length === 12 && cleanPhone.startsWith("91")) cleanPhone = cleanPhone.slice(2);
-      else if (cleanPhone.length === 13 && cleanPhone.startsWith("091")) cleanPhone = cleanPhone.slice(3);
-      else if (cleanPhone.length === 11 && cleanPhone.startsWith("0")) cleanPhone = cleanPhone.slice(1);
+      const rawPhone2 = addressForm.phone.replace(/[\s\-\(\)]/g, "");
+      const cleanPhone = rawPhone2.startsWith("+91") ? rawPhone2.slice(3) : rawPhone2.startsWith("91") && rawPhone2.length === 12 ? rawPhone2.slice(2) : rawPhone2.startsWith("0") && rawPhone2.length === 11 ? rawPhone2.slice(1) : rawPhone2;
       const parts = [
         addressForm.houseNumber.trim(),
         addressForm.street.trim(),
@@ -580,6 +607,7 @@ export default function UserDashboard() {
         phone: cleanPhone,
         houseNumber: addressForm.houseNumber.trim(),
         street: addressForm.street.trim(),
+        area: addressForm.area ? addressForm.area.trim() : null,
         landmark: addressForm.landmark ? addressForm.landmark.trim() : null,
         city: addressForm.city.trim(),
         state: addressForm.state.trim(),
@@ -630,6 +658,7 @@ export default function UserDashboard() {
       phone: addr.phone || "",
       houseNumber: addr.houseNumber || "",
       street: addr.street || "",
+      area: addr.area || "",
       landmark: addr.landmark || "",
       city: addr.city || "",
       state: addr.state || "",
@@ -668,9 +697,10 @@ export default function UserDashboard() {
     finally { setDeletingAddressId(null); }
   };
 
-  const [healthLogs, setHealthLogs] = useState<any[]>([]);
   const [trackingOrder, setTrackingOrder] = useState<any>(null);
   const [isTrackingMode, setIsTrackingMode] = useState(false);
+
+  const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
     const u = getStoredUser();
@@ -681,7 +711,8 @@ export default function UserDashboard() {
     }
 
     if (u.role !== "user") {
-      window.location.replace(getDashboardUrl(u.role));
+      setRoleMismatchUser(u as any);
+      setAuthLoading(false);
       return;
     }
 
@@ -708,20 +739,11 @@ export default function UserDashboard() {
     } catch {} finally { if (!silent) setLoadingOrders(false); }
   }, []);
 
-  const fetchHealthLogs = useCallback(async (email: string) => {
-    try {
-      const res = await fetch(`/api/ai-prescribe?email=${email}`, { headers: getAuthHeaders() });
-      const data = await res.json();
-      setHealthLogs(data.healthLogs || data.logs || []);
-    } catch {}
-  }, []);
-
   useEffect(() => {
     if (user) {
       fetchOrders(user.email);
       fetchLoyalty(user.email);
       fetchAddresses(user.id);
-      fetchHealthLogs(user.email);
       
       const interval = setInterval(() => {
         fetchOrders(user.email, true);
@@ -729,7 +751,7 @@ export default function UserDashboard() {
       }, 5000);
       return () => { if (interval) clearInterval(interval); };
     }
-  }, [user, fetchOrders, fetchLoyalty, fetchAddresses, fetchHealthLogs]);
+  }, [user, fetchOrders, fetchLoyalty, fetchAddresses]);
 
   useEffect(() => {
     if (isTrackingMode && trackingOrder) {
@@ -748,8 +770,43 @@ export default function UserDashboard() {
   const totalSpent = orders.reduce((a, o) => a + (o.totalAmount || 0), 0);
   const deliveredCount = orders.filter(o => o.status === "DELIVERED").length;
 
+  if (roleMismatchUser) {
+    return (
+      <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-emerald-50 text-[#1E3A2F] rounded-2xl flex items-center justify-center mx-auto mb-4 border border-[#CDE3D5]">
+            <User size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Customer Account Required</h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong>{roleMismatchUser.email}</strong> ({roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner" : "Delivery Rider"}). To access the Customer Portal, please sign in with a Customer account.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                window.location.replace(getDashboardUrl(roleMismatchUser.role));
+              }}
+              className="w-full bg-[#1E3A2F] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+            >
+              Go to {roleMismatchUser.role === "shop_owner" ? "Medical Shop Owner Dashboard" : "Rider Dashboard"}
+            </button>
+            <button
+              onClick={() => {
+                clearAuthSession();
+                window.location.replace("/?auth=login&role=user");
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+            >
+              Sign In with Customer Account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading || !user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center">
       <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
         <HeartPulse size={32} />
       </div>
@@ -758,20 +815,21 @@ export default function UserDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F0F8F4] font-sans text-slate-900">
       
       {/* Top Nav (Hers Aesthetic) */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-[#E2EFE7] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a href="/" className="flex items-center gap-2">
-              <span className="text-3xl font-serif font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
+              <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Customer Portal</span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="flex items-center gap-2 bg-[#F0F6F2] border border-[#D5E6DC] px-4 py-2 rounded-full text-xs">
               <Award size={15} className="text-[#1E3A2F]" />
               <span className="font-black text-[#1E3A2F]">{loyaltyPoints} Loyalty Pts</span>
@@ -787,7 +845,7 @@ export default function UserDashboard() {
         
         {/* Welcome Section */}
         <div className="mb-8">
-          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900 mb-2">
+          <h1 className="text-3xl md:text-5xl font-sans tracking-tight text-slate-900 mb-2">
             Welcome back, <span className="text-[#1E3A2F] font-sans font-black">{user.name?.split(" ")[0]}</span>
           </h1>
           <p className="text-slate-500 font-medium text-sm">Manage your prescriptions, orders, and delivery addresses.</p>
@@ -798,7 +856,7 @@ export default function UserDashboard() {
           {[
             { icon: Package, label: "Total Orders", value: orders.length, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
             { icon: CheckCircle, label: "Delivered", value: deliveredCount, color: "text-emerald-700 bg-emerald-50" },
-            { icon: TrendingUp, label: "Total Spent", value: `₹${totalSpent.toFixed(0)}`, color: "text-teal-800 bg-teal-50" },
+            { icon: TrendingUp, label: "Total Spent", value: `${totalSpent}`, color: "text-teal-800 bg-teal-50" },
             { icon: Gift, label: "Loyalty Points", value: loyaltyPoints, color: "text-amber-700 bg-amber-50" },
           ].map(s => (
             <div key={s.label} className="bg-white rounded-[24px] p-6 border border-[#E2EFE7] shadow-sm">
@@ -813,7 +871,6 @@ export default function UserDashboard() {
         <div className="flex gap-2 bg-[#EBF4EE] p-1.5 rounded-full mb-8 w-fit border border-[#D5E6DC]">
           {[
             { id: "orders", label: "Order History", icon: Package },
-            { id: "health", label: "AI Health Logs", icon: Activity },
             { id: "profile", label: "Profile & Addresses", icon: User }
           ].map(t => (
             <button 
@@ -830,7 +887,7 @@ export default function UserDashboard() {
         {tab === "orders" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">Your Orders</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900">Your Orders</h2>
               <a href="/" className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md">
                 <Search size={14} /> Order Medicines
               </a>
@@ -869,9 +926,9 @@ export default function UserDashboard() {
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-xl text-[#1E3A2F]">₹{(order.totalAmount || 0).toFixed(2)}</p>
-                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold">Inc. ₹{order.surgeFee || 0} surge</p>}
-                    {(order.discountApplied || 0) > 0 && <p className="text-xs text-emerald-700 font-bold">Saved ₹{(order.discountApplied || 0).toFixed(2)}</p>}
+                    <p className="font-black text-xl text-[#1E3A2F]">{order.totalAmount || 0}</p>
+                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold">Inc. {order.surgeFee || 0} surge</p>}
+                    {(order.discountApplied || 0) > 0 && <p className="text-xs text-emerald-700 font-bold">Saved {order.discountApplied || 0}</p>}
                   </div>
                 </div>
 
@@ -885,7 +942,7 @@ export default function UserDashboard() {
                       </div>
                       <div className="text-right shrink-0">
                         <p className="text-xs font-black text-slate-700">×{item.quantity || item.qty || 1}</p>
-                        <p className="text-xs font-bold text-[#1E3A2F]">₹{(item.priceAtTime ?? item.price ?? 0).toFixed(2)}</p>
+                        <p className="text-xs font-bold text-[#1E3A2F]">{item.priceAtTime ?? item.price ?? 0}</p>
                       </div>
                     </div>
                   ))}
@@ -922,53 +979,12 @@ export default function UserDashboard() {
           </div>
         )}
 
-        {/* Health Log Tab */}
-        {tab === "health" && (
-          <div className="space-y-4">
-            <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">AI Health Consultations</h2>
-              <a href="/#ai" className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md">
-                <Sparkles size={14} /> New Consultation
-              </a>
-            </div>
-            {healthLogs.length === 0 ? (
-              <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-16 text-center shadow-sm">
-                <Activity size={44} className="mx-auto mb-4 text-slate-300" />
-                <h3 className="font-bold text-slate-700 text-lg mb-2">No consultations recorded</h3>
-                <p className="text-sm text-slate-400 mb-6">Describe your symptoms to get verified medicine suggestions.</p>
-                <a href="/#ai" className="inline-flex items-center gap-2 bg-[#1E3A2F] text-white px-8 py-3.5 rounded-full font-black text-xs uppercase tracking-wider">
-                  Start Consultation
-                </a>
-              </div>
-            ) : healthLogs.map((log: any) => (
-              <div key={log.id} className="bg-white rounded-[28px] border border-[#E2EFE7] shadow-sm p-6">
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-8 h-8 bg-[#E8F3ED] rounded-xl flex items-center justify-center text-[#1E3A2F]"><Activity size={15} /></div>
-                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
-                    {log.createdAt ? new Date(log.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Recent"}
-                  </span>
-                </div>
-                <div className="bg-[#F6FAF7] rounded-2xl p-4 mb-3 border border-[#E2EFE7]">
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-1">Symptoms Described</p>
-                  <p className="text-sm text-slate-800 font-medium">{log.symptoms}</p>
-                </div>
-                {log.prescription && (
-                  <div className="bg-[#EBF4EE] rounded-2xl p-4 border border-[#D5E6DC]">
-                    <p className="text-[10px] text-[#1E3A2F] font-black uppercase tracking-widest mb-1">Recommended Treatments</p>
-                    <p className="text-sm text-[#1E3A2F] font-bold">{log.prescription}</p>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
         {/* Profile Tab */}
         {tab === "profile" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] shadow-sm p-8">
               <div className="flex items-center gap-4 mb-6">
-                <div className="w-16 h-16 bg-[#1E3A2F] rounded-2xl flex items-center justify-center text-white text-2xl font-serif font-black shadow-md">
+                <div className="w-16 h-16 bg-[#1E3A2F] rounded-2xl flex items-center justify-center text-white text-2xl font-sans font-black shadow-md">
                   {user.name?.[0]?.toUpperCase()}
                 </div>
                 <div>
@@ -1101,6 +1117,12 @@ export default function UserDashboard() {
                 <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Street / Area <span className="text-rose-500">*</span></label>
                 <input value={addressForm.street} onChange={e => setAddressForm(p => ({ ...p, street: e.target.value }))} className={`w-full bg-slate-50 border rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F] ${addressErrors.street ? "border-rose-400" : "border-slate-200"}`} placeholder="e.g., MG Road, Andheri West" />
                 {addressErrors.street && <p className="text-[10px] text-rose-500 mt-1 font-medium">{addressErrors.street}</p>}
+              </div>
+
+              {/* Area / Locality (optional) */}
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase mb-1.5">Area / Locality <span className="text-slate-400">(Optional)</span></label>
+                <input value={addressForm.area} onChange={e => setAddressForm(p => ({ ...p, area: e.target.value }))} className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#1E3A2F]" placeholder="e.g. Andheri East, Bandra West" />
               </div>
 
               {/* Landmark (optional) */}

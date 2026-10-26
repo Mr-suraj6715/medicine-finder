@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc
+from sqlalchemy import desc, or_
+from typing import Optional
 from database import get_db
 import models, schemas, auth
 import n8n_service
@@ -140,13 +141,22 @@ def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), cur
     if order.riderId and order.riderId != target_rider_id:
         order.cancelledRiderId = order.riderId
 
-    earnings_factor = 1.0 if rider.riderRating >= 4.0 else (0.5 if rider.riderRating >= 3.0 else 0.0)
+    rating = rider.riderRating or 0.0
+    earnings_factor = 1.0 if rating >= 4.0 else (0.5 if rating >= 3.0 else 0.0)
     order.riderId = target_rider_id
     previous_status = order.status
     order.status = "RIDER_ASSIGNED"
     order.driverEarnings = (order.surgeFee * earnings_factor) if order.isEmergency else 0.0
 
     order_user = db.query(models.User).filter(models.User.id == order.userId).first()
+
+    # Resolve pharmacy name for n8n events
+    pharmacy_name = None
+    try:
+        if order.items and order.items[0].inventory and order.items[0].inventory.pharmacy:
+            pharmacy_name = order.items[0].inventory.pharmacy.name
+    except Exception:
+        pass
 
     db.commit()
 
@@ -159,6 +169,7 @@ def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), cur
         rider_name=rider.name,
         user_email=order_user.email if order_user else None,
         user_name=order_user.name if order_user else None,
+        pharmacy_name=pharmacy_name,
         delivery_address=order.deliveryAddress,
     )
     n8n_service.emit_order_status_changed(
@@ -170,15 +181,22 @@ def reassign_rider(req: schemas.ShopReassign, db: Session = Depends(get_db), cur
         user_name=order_user.name if order_user else None,
         rider_email=rider.email,
         rider_name=rider.name,
+        pharmacy_name=pharmacy_name,
         delivery_address=order.deliveryAddress,
     )
 
     return {"success": True, "message": f"Order assigned to {rider.name or rider.email} successfully!"}
 
 @router.get("/orders")
-def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
+def get_shop_orders(pharmacyId: Optional[str] = Query(None), db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can access orders")
+
+    if not pharmacyId:
+        pharmacy = db.query(models.Pharmacy).filter(models.Pharmacy.id == current_user.id).first()
+        if not pharmacy:
+            pharmacy = db.query(models.Pharmacy).first()
+        pharmacyId = pharmacy.id if pharmacy else current_user.id
 
     # 1. Fetch order items specifically for this pharmacy
     specific_items = db.query(models.OrderItem).options(
@@ -251,7 +269,10 @@ def get_shop_orders(pharmacyId: str = Query(...), db: Session = Depends(get_db),
 def update_shop_order_status(req: schemas.OrderStatusUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(auth.get_current_user)):
     if current_user.role != "shop_owner":
         raise HTTPException(status_code=403, detail="Forbidden: Only shop owners can update order status")
-    order = db.query(models.Order).filter(models.Order.id == req.orderId).first()
+    # Accept both real UUID and trackingNumber as orderId
+    order = db.query(models.Order).filter(
+        or_(models.Order.id == req.orderId, models.Order.trackingNumber == req.orderId)
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 

@@ -89,6 +89,7 @@ import {
   Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award, KeyRound
 } from "lucide-react";
 import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, getAuthToken, type AuthUser } from "@/lib/auth";
+import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 
 // ─── Types ────────────────────────────────────────────────────────
 type CartItem = { inventory: any; medicine: any; quantity: number };
@@ -175,7 +176,9 @@ function LeafletMap({
       <MapContainer center={[mapCenterLat, mapCenterLng]} zoom={zoom} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer 
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" 
+          url={process.env.NEXT_PUBLIC_CARTO_API_KEY ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${process.env.NEXT_PUBLIC_CARTO_API_KEY}` : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"} 
+          subdomains="abcd"
+          maxZoom={20}
         />
         
         {/* Customer / User Marker */}
@@ -648,6 +651,7 @@ function LoginModal({
         </div>
 
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-medium">{error}</div>}
+
         <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Email</label>
@@ -673,6 +677,22 @@ function LoginModal({
             {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
+
+        <div className="relative flex py-4 items-center">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">or</span>
+          <div className="flex-grow border-t border-slate-200"></div>
+        </div>
+
+        {/* Google Authentication */}
+        <GoogleAuthButton
+          mode="signin"
+          role={role}
+          onSuccess={onSuccess}
+          onError={(msg) => setError(msg)}
+          disabled={loading}
+        />
+
         <div className="mt-4 text-center text-sm">
           <span className="text-slate-500">Don't have an account? </span>
           <button type="button" onClick={() => onSwitch(role)} className="text-[#1E3A2F] font-semibold hover:underline">Sign up</button>
@@ -734,6 +754,24 @@ function SignupModal({
           <div><h2 className="text-xl font-bold text-slate-900">Create Account</h2><p className="text-xs text-slate-500">Join MediFind today</p></div>
         </div>
         {error && <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-3 mb-4 text-sm font-medium">{error}</div>}
+
+        {/* Google Authentication */}
+        <div className="mb-4">
+          <GoogleAuthButton
+            mode="signup"
+            role={form.role as any}
+            onSuccess={onSuccess}
+            onError={(msg) => setError(msg)}
+            disabled={loading}
+          />
+        </div>
+
+        <div className="relative flex py-2 items-center mb-4">
+          <div className="flex-grow border-t border-slate-200"></div>
+          <span className="flex-shrink mx-4 text-xs font-bold text-slate-400 uppercase tracking-widest">or register with email</span>
+          <div className="flex-grow border-t border-slate-200"></div>
+        </div>
+
         <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Full Name</label>
@@ -1193,7 +1231,7 @@ export default function Home() {
     } catch {}
   }, [user]);
 
-  useEffect(() => { handleSearch("Paracetamol"); }, [handleSearch]);
+  // Initial search removed so clean landing page displays by default
   useEffect(() => { if (selectedMedicine) { fetchInventory(selectedMedicine.id); const interval = setInterval(() => fetchInventory(selectedMedicine.id), 5000); return () => clearInterval(interval); } }, [selectedMedicine, fetchInventory]);
   useEffect(() => { fetchLoyalty(); }, [fetchLoyalty]);
 
@@ -1464,58 +1502,6 @@ export default function Home() {
         </div>
       </div>
 
-      {/* ── PERSISTENT TRACKING BAR ── */}
-      {trackingOrder && trackingOrder.status !== "DELIVERED" && (
-        <div className="fixed top-16 left-0 right-0 z-[49] bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-xl px-4 py-3 animate-in slide-in-from-top duration-500">
-          <div className="max-w-6xl mx-auto flex items-center justify-between gap-6">
-            <div className="flex items-center gap-3 shrink-0">
-              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}>
-                <Navigation size={20} className={trackingOrder.isEmergency ? "animate-pulse" : ""} />
-              </div>
-              <div className="hidden md:block">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Live Delivery Status</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-black text-slate-900">
-                    {trackingOrder.status === "PENDING" && "Order Placed"}
-                    {trackingOrder.status === "PROCESSING" && "Packing Medicines..."}
-                    {trackingOrder.status === "CONFIRMED" && "Waiting for Rider"}
-                    {trackingOrder.status === "RIDER_ASSIGNED" && "Rider Accepted Delivery"}
-                    {trackingOrder.status === "RIDER_AT_PHARMACY" && "Rider at Pharmacy"}
-                    {trackingOrder.status === "RIDER_PICKED_UP" && "Order Picked Up"}
-                    {trackingOrder.status === "OUT_FOR_DELIVERY" && "On the Way"}
-                    {trackingOrder.status === "REACHED_CUSTOMER" && "Rider Reached Location"}
-                  </span>
-                  {trackingOrder.isEmergency && <span className="text-[10px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full border border-rose-100">PRIORITY</span>}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex-1 max-w-xl h-2 bg-slate-100 rounded-full relative overflow-hidden hidden sm:block">
-              <div 
-                className={`absolute top-0 left-0 h-full transition-all duration-1000 ease-out ${trackingOrder.isEmergency ? "bg-rose-500" : "bg-[#1E3A2F]"}`}
-                style={{
-                  width: `${
-                    trackingOrder.status === "PENDING" ? "15%" :
-                    trackingOrder.status === "PROCESSING" ? "30%" :
-                    trackingOrder.status === "CONFIRMED" ? "45%" :
-                    trackingOrder.status === "RIDER_ASSIGNED" ? "60%" :
-                    trackingOrder.status === "RIDER_AT_PHARMACY" ? "75%" :
-                    trackingOrder.status === "OUT_FOR_DELIVERY" ? "90%" : "0%"
-                  }`
-                }}
-              />
-            </div>
-
-            <button 
-              onClick={() => setIsTrackingMode(true)}
-              className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg transition-all active:scale-95 flex items-center gap-2"
-            >
-              <Activity size={14} /> Full View
-            </button>
-          </div>
-        </div>
-      )}
-
       {showLogin && (
         <LoginModal 
           initialRole={authModalRole}
@@ -1577,11 +1563,12 @@ export default function Home() {
 
       {/* ── CLEAN MINIMALIST NAVBAR (Hers Style) ── */}
       <nav className="sticky top-0 z-50 w-full bg-white/95 backdrop-blur-md border-b border-slate-100">
-        <div className="max-w-7xl mx-auto px-6 sm:px-10">
-          <div className="flex justify-between items-center h-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8">
+          <div className="flex justify-between items-center h-16">
             
             {/* Logo */}
-            <a href="/" className="flex items-center gap-2">
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
               <span className="text-3xl font-serif tracking-tighter text-[#1E3A2F] font-bold">medifind</span>
             </a>
 
@@ -1590,7 +1577,7 @@ export default function Home() {
               <a href="#categories" className="hover:text-[#1E3A2F] transition-colors">Treatments</a>
               <a href="#search" className="hover:text-[#1E3A2F] transition-colors">Search Medicines</a>
               <a href="#pharmacies" className="hover:text-[#1E3A2F] transition-colors">Compare Pharmacies</a>
-              <a href="#ai" className="hover:text-[#1E3A2F] transition-colors">AI Health</a>
+              
             </div>
 
             {/* Right Action Controls */}
@@ -1623,15 +1610,9 @@ export default function Home() {
                 <div className="flex items-center gap-2 sm:gap-3">
                   <button 
                     onClick={() => { setAuthModalRole("user"); setShowLogin(true); }} 
-                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-4 sm:px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
+                    className="border border-[#1E3A2F] text-[#1E3A2F] hover:bg-[#1E3A2F] hover:text-white px-5 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all"
                   >
                     Account
-                  </button>
-                  <button 
-                    onClick={() => { setAuthModalRole("shop_owner"); setShowLogin(true); }} 
-                    className="hidden sm:flex items-center gap-1.5 bg-[#1E3A2F] text-white hover:bg-[#152a22] px-4 py-2 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-sm"
-                  >
-                    <Store size={13} /> Pharmacy Partner
                   </button>
                 </div>
               )}
@@ -1654,19 +1635,19 @@ export default function Home() {
       </nav>
 
       {/* ── EDITORIAL HERO HEADLINE (Hers Style) ── */}
-      <section className="bg-[#F6FAF7] pt-12 pb-14 px-6 md:px-12 text-center">
-        <div className="max-w-4xl mx-auto">
-          <h1 className="text-5xl md:text-7xl font-serif tracking-tight text-slate-900 leading-[1.08] mb-4">
-            <span className="text-[#2D4A3E] font-normal block md:inline">Faster medicine</span>{" "}
-            <span className="font-sans font-black tracking-tight text-slate-900 block md:inline">personalized to you</span>
+      <section className="bg-[#F6FAF7] pt-8 pb-10 px-6 md:px-12 text-center">
+        <div className="max-w-3xl mx-auto">
+          <h1 className="text-5xl md:text-7xl font-sans font-bold tracking-tight text-slate-900 leading-[1.08] mb-4">
+            <span className="text-[#2D4A3E] font-medium block md:inline">Faster medicine</span>{" "}
+            <span className="font-sans font-extrabold tracking-tight text-slate-900 block md:inline">personalized to you</span>
           </h1>
-          <p className="text-slate-500 font-medium text-lg md:text-xl tracking-tight mb-8">
+          <p className="text-slate-500 font-medium text-base md:text-lg tracking-tight mb-7">
             Customized care starts here
           </p>
 
           {/* Search Input Box */}
           <div className="max-w-xl mx-auto relative">
-            <div id="search" className="bg-white rounded-full shadow-lg border border-slate-200 p-2 flex items-center gap-3 px-6">
+            <div id="search" className="bg-white rounded-full shadow-lg border border-slate-200 p-3 flex items-center gap-4 px-6">
               <Search size={20} className="text-slate-400 shrink-0" />
               <input
                 type="text"
@@ -1681,7 +1662,7 @@ export default function Home() {
               <button
                 onClick={() => { setSearchTerm(searchInput); handleSearch(searchInput); setShowSuggestions(false); }}
                 disabled={searchLoading}
-                className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-6 py-3 rounded-full font-bold text-xs uppercase tracking-wider transition-all active:scale-95 shrink-0"
+                className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-4 rounded-full font-bold text-sm uppercase tracking-wider transition-all active:scale-95 shrink-0"
               >
                 {searchLoading ? "Searching…" : "Search"}
               </button>
@@ -1756,14 +1737,12 @@ export default function Home() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <button
                       onClick={() => {
-                        setRouteModalPharmacy(bestOption.pharmacy);
-                        setRouteModalMedicine(selectedMedicine);
-                        setRouteModalQuantity(quantity);
-                        setIsRouteModalOpen(true);
+                        addToCart(bestOption, selectedMedicine, quantity);
+                        setIsCartOpen(true);
                       }}
-                      className="w-full bg-white hover:bg-slate-50 border border-slate-200 text-[#1E3A2F] py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
+                      className="w-full bg-white hover:bg-[#1E3A2F] hover:text-white border-2 border-[#1E3A2F] text-[#1E3A2F] py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-1.5 shadow-sm"
                     >
-                      <MapIcon size={16} /> View Route & Map
+                      <ArrowRight size={16} /> Buy Now
                     </button>
                     <button onClick={() => addToCart(bestOption, selectedMedicine, quantity)}
                       className="w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white py-3.5 rounded-xl font-bold text-xs transition-all active:scale-95 flex items-center justify-center gap-2 shadow-lg">
@@ -1880,14 +1859,18 @@ export default function Home() {
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <button
                           onClick={() => {
-                            setRouteModalPharmacy(p);
-                            setRouteModalMedicine(selectedMedicine);
-                            setRouteModalQuantity(quantity);
-                            setIsRouteModalOpen(true);
+                            const inv = inventory.find((i: any) => i.pharmacy?.name === p.name) || {
+                              id: p.inventoryId || `temp-${p.name}`,
+                              price: p.price,
+                              stock: p.stock || 50,
+                              pharmacy: p
+                            };
+                            addToCart(inv, selectedMedicine, quantity);
+                            setIsCartOpen(true);
                           }}
-                          className="bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
+                          className="bg-white hover:bg-[#1E3A2F] hover:text-white border-2 border-[#1E3A2F] text-[#1E3A2F] py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5"
                         >
-                          <MapIcon size={13} className="text-[#1E3A2F]" /> View Route
+                          <ArrowRight size={13} /> Buy Now
                         </button>
                         <button
                           onClick={() => {
@@ -1901,7 +1884,7 @@ export default function Home() {
                           }}
                           className="bg-[#1E3A2F] hover:bg-[#152a22] text-white py-2.5 rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-1.5 shadow-sm"
                         >
-                          <ShoppingCart size={13} /> Order Now
+                          <ShoppingCart size={13} /> Add to Cart
                         </button>
                       </div>
                     </div>
@@ -1997,359 +1980,6 @@ export default function Home() {
           >
             Start Your Order
           </button>
-        </div>
-
-        {/* ── AI HEALTH ASSISTANT ── */}
-        <div id="ai" className="bg-[#1D352C] rounded-[36px] p-8 md:p-12 text-white relative overflow-hidden shadow-2xl border border-emerald-900/30">
-          <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
-          
-          <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-10">
-            {/* Left Side: Input & Safety Questions */}
-            <div className="lg:col-span-5 space-y-6">
-              <div>
-                <div className="inline-flex items-center gap-2 bg-[#2D4D3E] text-emerald-300 px-3.5 py-1.5 rounded-full text-xs font-black tracking-wider uppercase mb-4">
-                  <Sparkles size={13} className="animate-pulse" /> Safety-First Guidance
-                </div>
-                <h2 className="text-3xl md:text-4xl font-serif mb-3 tracking-tight text-white">
-                  Smart Health <span className="text-emerald-300 font-sans font-bold">Assistant</span>
-                </h2>
-                <p className="text-emerald-100/70 text-xs md:text-sm leading-relaxed font-medium">
-                  Provide your symptoms to check for possible minor conditions, screen for safety risks, and search local store inventory for matching OTC products.
-                </p>
-              </div>
-
-              {/* Symptom Input Textarea */}
-              <div className="space-y-2">
-                <label className="block text-[10px] font-black text-emerald-300 uppercase tracking-widest">Describe Your Symptoms</label>
-                <textarea
-                  value={userSymptoms}
-                  onChange={e => setUserSymptoms(e.target.value)}
-                  placeholder="E.g., I have a mild headache, runny nose, and low fever since yesterday..."
-                  className="w-full bg-[#14261F] border border-emerald-800/40 rounded-2xl p-4 text-white placeholder-emerald-100/30 focus:outline-none focus:ring-2 focus:ring-emerald-400 min-h-[100px] text-xs resize-none transition-all"
-                />
-              </div>
-
-              {/* Safety Questionnaire if needed */}
-              {safetyQuestions && (
-                <div className="bg-[#14261F] border border-emerald-800/40 rounded-2xl p-5 space-y-4 animate-in slide-in-from-bottom duration-300">
-                  <h4 className="text-xs font-black text-emerald-300 uppercase tracking-widest flex items-center gap-2">
-                    <ShieldCheck size={14} /> Medical Safety Check
-                  </h4>
-                  <p className="text-slate-300 text-[11px]">To safely check OTC guidance, we require the following info:</p>
-                  
-                  {safetyQuestions.age && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 font-bold">{safetyQuestions.age}</label>
-                      <input
-                        type="number"
-                        placeholder="Age in years"
-                        value={safetyAge}
-                        onChange={e => setSafetyAge(e.target.value)}
-                        className="w-full bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                      />
-                    </div>
-                  )}
-
-                  {safetyQuestions.allergies && (
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 font-bold">{safetyQuestions.allergies}</label>
-                      <input
-                        type="text"
-                        placeholder="e.g. none, penicillin, aspirin"
-                        value={safetyAllergies}
-                        onChange={e => setSafetyAllergies(e.target.value)}
-                        className="w-full bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                      />
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-2.5 pt-1">
-                    <input
-                      type="checkbox"
-                      id="preg_preg"
-                      checked={safetyPregnancy}
-                      onChange={e => setSafetyPregnancy(e.target.checked)}
-                      className="rounded bg-white/5 border-emerald-800/40 text-emerald-500 focus:ring-0"
-                    />
-                    <label htmlFor="preg_preg" className="text-[11px] text-slate-300 font-medium">Pregnant or breastfeeding?</label>
-                  </div>
-
-                  <button
-                    onClick={() => handleSymptomCheck()}
-                    className="w-full bg-emerald-400 hover:bg-emerald-300 text-[#1D352C] font-bold text-xs uppercase tracking-wider py-2.5 rounded-xl transition-all"
-                  >
-                    Confirm & Analyze
-                  </button>
-                </div>
-              )}
-
-              {/* Main Guidance Action */}
-              {!safetyQuestions && (
-                <button
-                  onClick={() => handleSymptomCheck()}
-                  disabled={isAnalyzingSymptoms || !userSymptoms.trim()}
-                  className="w-full bg-white hover:bg-emerald-300 text-[#1E3A2F] hover:text-[#1E3A2F] py-4 rounded-xl font-black text-xs uppercase tracking-wider transition-all flex items-center justify-center gap-3 disabled:opacity-30 shadow-lg"
-                >
-                  {isAnalyzingSymptoms ? (
-                    <><Brain className="animate-pulse" size={16} /> Analyzing Symptoms...</>
-                  ) : (
-                    <><Sparkles size={16} /> Get Safety Guidance</>
-                  )}
-                </button>
-              )}
-
-              {/* Escalation Options */}
-              {aiConsultResult && (
-                <div className="pt-2 border-t border-emerald-800/30 flex gap-3">
-                  <button
-                    onClick={() => {
-                      setEscalatedRole("pharmacist");
-                      setPharmacistChat([
-                        { sender: "pharmacist", text: "Hello! I am Dr. Roy, your virtual pharmacist. How can I assist you with your health query today?" }
-                      ]);
-                    }}
-                    className="flex-1 bg-white/5 border border-emerald-800/40 hover:bg-white/10 text-white rounded-xl py-3 text-xs font-bold text-center transition-colors"
-                  >
-                    Talk to Pharmacist
-                  </button>
-                  <button
-                    onClick={() => setEscalatedRole("doctor")}
-                    className="flex-1 bg-[#28483B] hover:bg-[#345d4d] text-emerald-300 rounded-xl py-3 text-xs font-bold text-center transition-colors"
-                  >
-                    Consult a Doctor
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Right Side: Response Feed, Escalation Chat, Booking Calendar */}
-            <div className="lg:col-span-7 bg-[#14261F] border border-emerald-800/20 rounded-[28px] p-6 min-h-[350px] flex flex-col">
-              
-              {/* Case 1: Simulated Chat with Pharmacist */}
-              {escalatedRole === "pharmacist" && (
-                <div className="flex-1 flex flex-col h-full animate-in fade-in duration-300">
-                  <div className="flex justify-between items-center pb-3 border-b border-emerald-800/30 mb-4">
-                    <div>
-                      <h4 className="font-bold text-xs text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider"><Activity size={12} /> Pharmacist Desk (Live)</h4>
-                      <p className="text-[9px] text-slate-400">Dr. Roy, Pharmacist • Registered MH/MUM/1042</p>
-                    </div>
-                    <button onClick={() => setEscalatedRole(null)} className="text-slate-400 hover:text-white p-1"><X size={16} /></button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[220px] text-xs">
-                    {pharmacistChat.map((msg, i) => (
-                      <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                        <div className={`p-3 rounded-2xl max-w-[85%] leading-relaxed ${msg.sender === "user" ? "bg-emerald-600 text-white" : "bg-white/5 border border-emerald-850 text-slate-100"}`}>
-                          {msg.text}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-3 pt-3 border-t border-emerald-800/30 flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="Ask about side effects, dosing instructions..."
-                      value={pharmacistInput}
-                      onChange={e => setPharmacistInput(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && sendPharmacistMessage()}
-                      className="flex-1 bg-white/5 border border-emerald-800/40 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
-                    />
-                    <button
-                      onClick={sendPharmacistMessage}
-                      className="bg-emerald-400 hover:bg-emerald-300 text-black px-4 py-2 rounded-xl text-xs font-bold transition-all"
-                    >
-                      Send
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Case 2: Simulated Doctor Consultation Booking */}
-              {escalatedRole === "doctor" && (
-                <div className="flex-1 flex flex-col justify-between h-full animate-in fade-in duration-300">
-                  <div>
-                    <div className="flex justify-between items-center pb-3 border-b border-emerald-800/30 mb-4">
-                      <div>
-                        <h4 className="font-bold text-xs text-emerald-300 flex items-center gap-1.5 uppercase tracking-wider"><Stethoscope size={12} /> Book Doctor Consultation</h4>
-                        <p className="text-[9px] text-slate-400">Instantly schedule a 1-on-1 virtual medical consult</p>
-                      </div>
-                      <button onClick={() => setEscalatedRole(null)} className="text-slate-400 hover:text-white p-1"><X size={16} /></button>
-                    </div>
-                    {escalationMessage ? (
-                      <div className="bg-emerald-950/40 border border-emerald-800/30 rounded-2xl p-6 text-center space-y-3">
-                        <CheckCircle size={32} className="text-emerald-300 mx-auto" />
-                        <p className="text-sm font-bold text-white">{escalationMessage}</p>
-                        <p className="text-xs text-slate-400">Our medical coordinator will send a join link to your email address before your appointment time.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Today</p>
-                            <p className="text-sm font-bold text-white">4:30 PM</p>
-                          </div>
-                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Today</p>
-                            <p className="text-sm font-bold text-white">6:00 PM</p>
-                          </div>
-                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Tomorrow</p>
-                            <p className="text-sm font-bold text-white">10:30 AM</p>
-                          </div>
-                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-3 text-center cursor-pointer hover:bg-white/10 transition-colors">
-                            <p className="text-[9px] font-black text-slate-400 uppercase">Tomorrow</p>
-                            <p className="text-sm font-bold text-white">2:00 PM</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {!escalationMessage && (
-                    <button
-                      onClick={() => setEscalationMessage("Appointment Confirmed! Teleconsultation booked for Today at 4:30 PM.")}
-                      className="w-full bg-emerald-400 hover:bg-emerald-300 text-black py-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all"
-                    >
-                      Book Teleconsultation
-                    </button>
-                  )}
-                </div>
-              )}
-
-              {/* Case 3: Display normal AI Result */}
-              {!escalatedRole && (
-                <div className="flex-1 flex flex-col justify-between">
-                  {aiConsultResult ? (
-                    <div className="space-y-4">
-                      
-                      {/* Sub-case 3a: RED FLAG detected */}
-                      {aiConsultResult.status === "RED_FLAG" && (
-                        <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl p-5 space-y-3 animate-in fade-in duration-500">
-                          <h3 className="text-xs font-black text-rose-400 flex items-center gap-1.5 uppercase tracking-widest">
-                            🚨 Emergency Alert: Red Flags Found
-                          </h3>
-                          <p className="text-rose-100 text-xs font-semibold leading-relaxed">
-                            {aiConsultResult.message}
-                          </p>
-                          <div className="bg-black/20 p-4 rounded-xl text-[11px] text-rose-200 leading-relaxed italic">
-                            {aiConsultResult.advice}
-                          </div>
-                          <div className="bg-rose-900/40 border border-rose-700/50 p-3 rounded-xl text-xs text-white font-bold">
-                            👉 {aiConsultResult.urgentAction}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Sub-case 3b: NEEDS SAFETY DETAILS */}
-                      {aiConsultResult.status === "NEEDS_SAFETY_INFO" && (
-                        <div className="h-full flex flex-col items-center justify-center text-center py-10 space-y-3 animate-in fade-in">
-                          <ShieldCheck size={40} className="text-emerald-400 opacity-60" />
-                          <p className="text-sm font-bold text-white">{aiConsultResult.message}</p>
-                          <p className="text-xs text-slate-400 max-w-sm">Please answer the safety questions in the left panel to receive matched medicine options.</p>
-                        </div>
-                      )}
-
-                      {/* Sub-case 3c: NO MATCH */}
-                      {aiConsultResult.status === "NO_MATCH" && (
-                        <div className="space-y-3 animate-in fade-in">
-                          <div className="bg-white/5 border border-emerald-800/30 rounded-xl p-4 text-xs text-slate-300">
-                            {aiConsultResult.message}
-                          </div>
-                          <p className="text-xs text-slate-400">{aiConsultResult.advice}</p>
-                        </div>
-                      )}
-
-                      {/* Sub-case 3d: OK - MATCH SUCCESS */}
-                      {aiConsultResult.status === "OK" && (
-                        <div className="space-y-4 max-h-[300px] overflow-y-auto pr-1 custom-scrollbar animate-in fade-in duration-500">
-                          
-                          {/* Match Header / Condition Advice */}
-                          {aiConsultResult.conditions.map((c: any) => (
-                            <div key={c.conditionKey} className="bg-white/5 border border-emerald-800/20 rounded-2xl p-4 space-y-2">
-                              <h4 className="text-xs font-black text-emerald-300 uppercase tracking-widest flex items-center gap-1.5">
-                                <Check size={12} /> {c.conditionLabel} Matches
-                              </h4>
-                              <p className="text-[11px] text-slate-300 leading-relaxed font-medium">{c.description}</p>
-                              <div className="text-[10px] text-slate-400 leading-relaxed"><span className="font-bold text-slate-300">Self-Care:</span> {c.selfCareAdvice}</div>
-                              {c.warning && (
-                                <div className="text-[9px] text-amber-300/90 leading-relaxed mt-1 font-bold">⚠️ Warning: {c.warning}</div>
-                              )}
-                            </div>
-                          ))}
-
-                          {/* Matching Products */}
-                          <div className="space-y-2.5">
-                            <h4 className="text-[10px] font-black text-emerald-300 uppercase tracking-widest mt-3">Matched OTC Inventory Products</h4>
-                            {aiConsultResult.suggestedProducts.length === 0 ? (
-                              <p className="text-xs text-slate-500 italic">No matching OTC inventory products are in stock right now.</p>
-                            ) : (
-                              aiConsultResult.suggestedProducts.map((p: any) => (
-                                <div key={p.medicineId} className="bg-[#1C2F27] hover:bg-[#253D33] border border-emerald-800/20 rounded-2xl p-4 transition-colors flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                                  <div className="space-y-1">
-                                    <div className="flex items-center gap-1.5">
-                                      <span className="font-bold text-xs text-white uppercase tracking-tight">{p.name}</span>
-                                      <span className="bg-emerald-950 text-emerald-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">OTC</span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-400">{p.generalUse}</p>
-                                    
-                                    {/* Pharmacy details dropdown/label */}
-                                    <div className="flex flex-wrap items-center gap-2 mt-1">
-                                      <span className="text-[9px] font-black text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded">In Stock</span>
-                                      <span className="text-[9px] font-medium text-slate-400">Available at {p.availableIn} stores</span>
-                                    </div>
-
-                                    {/* Warnings */}
-                                    {p.warnings && p.warnings.map((w: string, idx: number) => (
-                                      <p key={idx} className="text-[9px] font-black text-rose-400 mt-1 leading-tight">{w}</p>
-                                    ))}
-                                  </div>
-
-                                  <div className="flex flex-row sm:flex-col items-end gap-2 w-full sm:w-auto shrink-0 justify-between sm:justify-start">
-                                    <div className="text-right">
-                                      <p className="text-[9px] font-bold text-slate-400">Starting From</p>
-                                      <p className="text-sm font-black text-emerald-300">₹{p.startingPrice.toFixed(2)}</p>
-                                    </div>
-                                    <button
-                                      onClick={() => {
-                                        const mockMed = { id: p.medicineId, name: p.name, description: p.generalUse, category: p.category };
-                                        setSelectedMedicine(mockMed);
-                                        fetchInventory(p.medicineId);
-                                        setRouteModalMedicine(mockMed);
-                                        if (nearbyPharmacies.length > 0) setRouteModalPharmacy(nearbyPharmacies[0]);
-                                        setIsRouteModalOpen(true);
-                                      }}
-                                      className="bg-emerald-400 hover:bg-emerald-300 text-black text-[10px] font-black px-3 py-1.5 rounded-lg transition-all uppercase tracking-wider flex items-center gap-0.5"
-                                    >
-                                      View Route & Order <ArrowRight size={10} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-
-                          {/* Safe Usage Disclaimer */}
-                          <div className="text-[9px] text-slate-400 bg-black/10 rounded-xl p-3 border border-emerald-900/30 leading-relaxed">
-                            {aiConsultResult.disclaimer}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center text-center p-8 border border-white/5 rounded-3xl bg-white/5 my-auto">
-                      <Brain size={40} className="text-emerald-300/30 mb-3" />
-                      <p className="text-emerald-100/60 text-xs font-semibold">Enter your symptoms on the left to receive safe, inventory-matched health guidance.</p>
-                    </div>
-                  )}
-
-                  {/* Warning footer */}
-                  {aiConsultResult && (
-                    <div className="pt-3 border-t border-emerald-800/30 text-[9px] text-slate-450 italic leading-snug flex items-center gap-1">
-                      <span>⚠️ {aiConsultResult.advice}</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
         </div>
 
         {/* ── VERIFIED NEIGHBORHOOD PHARMACIES (Clean, Contextual, No Permanent Map) ── */}
@@ -2760,7 +2390,8 @@ export default function Home() {
       {/* ── FOOTER ── */}
       <footer className="bg-[#1E3A2F] text-white py-12">
         <div className="max-w-7xl mx-auto px-6 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
+          <div className="flex items-center justify-center gap-2.5 mb-4">
+            <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl border border-white/20 shadow-sm" />
             <span className="text-3xl font-serif font-bold tracking-tighter">medifind</span>
           </div>
           <p className="text-slate-300 text-sm max-w-md mx-auto mb-6">

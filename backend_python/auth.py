@@ -44,6 +44,19 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+def create_token_for_user(user: models.User, expires_delta: Optional[timedelta] = None) -> str:
+    """Creates a JWT access token cryptographically binding userId, email, role, and name."""
+    return create_access_token(
+        data={
+            "sub": user.email,
+            "email": user.email,
+            "userId": user.id,
+            "role": user.role,
+            "name": user.name or "",
+        },
+        expires_delta=expires_delta
+    )
+
 def get_current_user(token: Optional[str] = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> models.User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,

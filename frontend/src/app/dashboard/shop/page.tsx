@@ -10,6 +10,8 @@ import {
   HelpCircle, Info, Filter, Layers, CheckSquare, Sparkles, FileText, AlertTriangle
 } from "lucide-react";
 import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
+import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
+import { Button } from "@/components/ui/Button";
 
 type AuthUser = { id: string; email: string; name: string; role: string };
 
@@ -167,6 +169,8 @@ export default function ShopDashboard() {
     } catch (e) { console.error(e); }
   }, []);
 
+  const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
+
   useEffect(() => {
     const u = getStoredUser();
 
@@ -176,7 +180,8 @@ export default function ShopDashboard() {
     }
 
     if (u.role !== "shop_owner") {
-      window.location.replace(getDashboardUrl(u.role));
+      setRoleMismatchUser(u as any);
+      setAuthLoading(false);
       return;
     }
 
@@ -870,9 +875,44 @@ export default function ShopDashboard() {
   const totalItems = inventory.reduce((a, m) => a + (m.stock || 0), 0);
   const lowStock = inventory.filter(m => m.stock < 20).length;
 
+  if (roleMismatchUser) {
+    return (
+      <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-100 p-8 max-w-md w-full animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-amber-200">
+            <Store size={32} />
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Shop Owner Account Required</h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong>{roleMismatchUser.email}</strong> ({roleMismatchUser.role === "user" ? "Customer" : "Delivery Rider"}). To access the Medical Shop Owner Dashboard, please sign in with your Medical Shop Owner account.
+          </p>
+          <div className="space-y-3">
+            <button
+              onClick={() => {
+                clearAuthSession();
+                window.location.replace("/?auth=login&role=shop_owner");
+              }}
+              className="w-full bg-[#078B5A] text-white py-3 rounded-xl font-bold text-sm hover:bg-[#152a22] transition-colors"
+            >
+              Sign In as Medical Shop Owner
+            </button>
+            <button
+              onClick={() => {
+                window.location.replace(getDashboardUrl(roleMismatchUser.role));
+              }}
+              className="w-full bg-slate-100 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+            >
+              Return to {roleMismatchUser.role === "user" ? "Customer Portal" : "Rider Portal"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (authLoading || !user) return (
-    <div className="min-h-screen bg-[#F6FAF7] flex flex-col items-center justify-center">
-      <div className="bg-[#1E3A2F] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
+    <div className="min-h-screen bg-[#F0F8F4] flex flex-col items-center justify-center">
+      <div className="bg-[#078B5A] p-3.5 rounded-2xl text-white shadow-xl animate-bounce mb-4">
         <HeartPulse size={32} />
       </div>
       <p className="text-[#1E3A2F] font-bold animate-pulse text-sm">Verifying Shop Owner Authorization...</p>
@@ -880,13 +920,14 @@ export default function ShopDashboard() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F6FAF7] font-sans text-slate-900">
+    <div className="min-h-screen bg-[#F0F8F4] font-sans text-slate-900">
       {/* Top Nav (Hers Aesthetic) */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-[#E2EFE7] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <a href="/" className="flex items-center gap-2">
-              <span className="text-3xl font-serif font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
+            <a href="/" className="flex items-center gap-2.5">
+              <img src="/logo.svg" alt="MediFind Logo" className="w-8 h-8 rounded-xl shadow-sm" />
+              <span className="text-3xl font-sans font-bold tracking-tighter text-[#1E3A2F]">medifind</span>
             </a>
             <span className="text-slate-300 hidden sm:inline">|</span>
             <span className="text-xs font-black uppercase tracking-wider text-[#2D4A3E] bg-[#E8F3ED] px-3 py-1 rounded-full hidden sm:inline">Pharmacy Merchant</span>
@@ -916,7 +957,7 @@ export default function ShopDashboard() {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl md:text-5xl font-serif tracking-tight text-slate-900 mb-2">
+          <h1 className="text-3xl md:text-5xl font-sans tracking-tight text-slate-900 mb-2">
             Pharmacy Portal 🏪 <span className="text-[#1E3A2F] font-sans font-black">{settings.name || user.name}</span>
           </h1>
           <p className="text-slate-500 font-medium text-sm">Manage incoming customer orders, inventory stock, and delivery dispatches.</p>
@@ -925,7 +966,7 @@ export default function ShopDashboard() {
         {/* Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           {[
-            { icon: TrendingUp, label: "Total Revenue", value: `₹${totalRevenue.toLocaleString()}`, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
+            { icon: TrendingUp, label: "Total Revenue", value: totalRevenue, color: "text-[#1E3A2F] bg-[#E8F3ED]" },
             { icon: ShoppingCart, label: "Pending Orders", value: pendingOrders, color: "text-amber-800 bg-amber-50" },
             { icon: Package, label: "Items in Stock", value: totalItems, color: "text-teal-800 bg-teal-50" },
             { icon: AlertCircle, label: "Low Stock Alert", value: lowStock, color: "text-rose-600 bg-rose-50" },
@@ -950,7 +991,7 @@ export default function ShopDashboard() {
             <button 
               key={t.id} 
               onClick={() => setTab(t.id as any)}
-              className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${tab === t.id ? "bg-[#1E3A2F] text-white shadow-md" : "text-slate-600 hover:text-slate-900"}`}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all whitespace-nowrap ${tab === t.id ? "bg-[#078B5A] text-white shadow-md" : "text-slate-600 hover:text-slate-900"}`}
             >
               <t.icon size={15} /> {t.label}
             </button>
@@ -961,7 +1002,7 @@ export default function ShopDashboard() {
         {tab === "orders" && (
           <div className="space-y-4">
             <div className="flex justify-between items-center mb-2">
-              <h2 className="text-2xl font-serif font-bold text-slate-900">Incoming Customer Orders</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900">Incoming Customer Orders</h2>
             </div>
             {orders.length === 0 ? (
               <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-16 text-center shadow-sm">
@@ -987,9 +1028,9 @@ export default function ShopDashboard() {
                     <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Clock size={11} /> {order.time || "Recent"}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-black text-xl text-[#1E3A2F]">₹{(order.total + (order.isEmergency ? order.surgeFee : 0)).toLocaleString()}</p>
+                    <p className="font-black text-xl text-[#1E3A2F]">{order.total + (order.isEmergency ? order.surgeFee : 0)}</p>
                     <p className="text-xs text-slate-400 font-medium">{order.items?.length || 0} item{(order.items?.length || 0) !== 1 ? "s" : ""}</p>
-                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold mt-1">Surcharge: ₹{order.surgeFee}</p>}
+                    {order.isEmergency && <p className="text-[10px] text-rose-500 font-bold mt-1">Surcharge: {order.surgeFee}</p>}
                   </div>
                 </div>
 
@@ -1035,7 +1076,7 @@ export default function ShopDashboard() {
                       </div>
                       <button
                         onClick={() => setReassignModalOrder(order)}
-                        className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
+                        className="text-[10px] font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                       >
                         <UserCheck size={11} /> Assign Another Rider
                       </button>
@@ -1046,7 +1087,7 @@ export default function ShopDashboard() {
                       {order.status !== "DELIVERED" && (
                         <button
                           onClick={() => setReassignModalOrder(order)}
-                          className="text-[10px] font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
+                          className="text-[10px] font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-1.5 rounded-full flex items-center gap-1 transition-colors shadow-sm uppercase tracking-wider"
                         >
                           <UserCheck size={11} /> Assign Rider
                         </button>
@@ -1059,7 +1100,7 @@ export default function ShopDashboard() {
                   {order.items?.map((item: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between bg-[#F6FAF7] border border-[#E2EFE7] rounded-xl p-3 text-sm">
                       <div className="flex items-center gap-2"><Pill size={15} className="text-[#1E3A2F]" /> <span className="font-bold text-slate-800">{item.name}</span></div>
-                      <span className="text-slate-500 font-bold text-xs">×{item.qty} — ₹{(item.price * item.qty).toFixed(0)}</span>
+                      <span className="text-slate-500 font-bold text-xs">×{item.qty} — {item.price * item.qty}</span>
                     </div>
                   ))}
                 </div>
@@ -1069,7 +1110,7 @@ export default function ShopDashboard() {
                     order.status === "PENDING" ? (
                       <button
                         onClick={() => updateOrderStatus(order.realId || order.id, "PROCESSING")}
-                        className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 ${order.isEmergency ? "bg-rose-600 text-white" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white"}`}
+                        className={`flex items-center gap-2 px-6 py-2.5 rounded-full font-black text-xs uppercase tracking-wider shadow-md transition-all active:scale-95 ${order.isEmergency ? "bg-rose-600 text-white" : "bg-[#078B5A] hover:bg-[#152a22] text-white"}`}
                       >
                         <CheckCircle size={14} /> Accept & Prepare
                       </button>
@@ -1118,7 +1159,7 @@ export default function ShopDashboard() {
           <div>
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
               <div>
-                <h2 className="text-2xl font-serif font-bold text-slate-900">Medicine Catalog & Stock</h2>
+                <h2 className="text-2xl font-sans font-bold text-slate-900">Medicine Catalog & Stock</h2>
                 <p className="text-xs text-slate-500 font-medium mt-0.5">Manage stock individually or bulk-upload thousands of medicines with CSV.</p>
               </div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1142,7 +1183,7 @@ export default function ShopDashboard() {
                     setImportSummary(null);
                     setImportError(null);
                   }}
-                  className="flex items-center gap-2 bg-[#1E3A2F] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+                  className="flex items-center gap-2 bg-[#078B5A] hover:bg-[#152a22] text-white px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
                 >
                   <FileSpreadsheet size={15} className="text-emerald-300" /> Import Inventory
                   <span className="text-[10px] bg-emerald-700/80 text-emerald-200 px-2 py-0.5 rounded-full font-bold">Excel / CSV</span>
@@ -1189,7 +1230,7 @@ export default function ShopDashboard() {
                           {editingStock === med.id ? (
                             <input type="number" step="0.01" min="0" value={editStock.price} onChange={e => setEditStock(p => ({ ...p, price: e.target.value }))}
                               className="w-20 border border-emerald-300 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#1E3A2F]" />
-                          ) : <span className="font-black text-[#1E3A2F]">₹{med.price}</span>}
+                          ) : <span className="font-black text-[#1E3A2F]">{med.price}</span>}
                         </td>
                         <td className="px-6 py-4">
                           {editingStock === med.id ? (
@@ -1214,7 +1255,7 @@ export default function ShopDashboard() {
                           <div className="flex items-center gap-2">
                             {editingStock === med.id ? (
                               <div className="flex gap-2">
-                                <button onClick={() => handleSaveStock(med.id)} className="bg-[#1E3A2F] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
+                                <button onClick={() => handleSaveStock(med.id)} className="bg-[#078B5A] text-white text-xs px-3 py-1.5 rounded-lg font-bold">Save</button>
                                 <button onClick={() => setEditingStock(null)} className="bg-slate-200 text-slate-600 text-xs px-3 py-1.5 rounded-lg font-bold">Cancel</button>
                               </div>
                             ) : (
@@ -1244,7 +1285,7 @@ export default function ShopDashboard() {
         {tab === "ai-mappings" && (
           <div className="space-y-6">
             <div>
-              <h2 className="text-2xl font-serif font-bold text-slate-900 mb-1">AI Recommendation Mapping Review</h2>
+              <h2 className="text-2xl font-sans font-bold text-slate-900 mb-1">AI Recommendation Mapping Review</h2>
               <p className="text-slate-500 text-xs md:text-sm font-medium">Verify how your current stock matches the AI Consultant categories. Only OTC non-prescription items with positive stock are mapped.</p>
             </div>
             
@@ -1300,7 +1341,7 @@ export default function ShopDashboard() {
                                     {isRx && <span className="bg-rose-50 text-rose-500 text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider">Rx Only</span>}
                                   </div>
                                   <div className="text-right">
-                                    <span className="font-black text-[#1E3A2F] mr-2">₹{m.price}</span>
+                                    <span className="font-black text-[#1E3A2F] mr-2">{m.price}</span>
                                     <span className="text-slate-500 font-bold">{m.stock} left</span>
                                   </div>
                                 </div>
@@ -1321,12 +1362,12 @@ export default function ShopDashboard() {
         {tab === "analytics" && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-8 shadow-sm">
-              <h3 className="font-serif font-bold text-xl text-slate-900 mb-4">Revenue Breakdown</h3>
-              <p className="text-3xl font-black text-[#1E3A2F] mb-4">₹{totalRevenue.toLocaleString()}</p>
+              <h3 className="font-sans font-bold text-xl text-slate-900 mb-4">Revenue Breakdown</h3>
+              <p className="text-3xl font-black text-[#1E3A2F] mb-4">{totalRevenue}</p>
               <p className="text-slate-500 text-sm leading-relaxed">Generated across {inventory.reduce((a, b) => a + (b.sold || 0), 0)} unit deliveries through MediFind network.</p>
             </div>
             <div className="bg-white rounded-[32px] border border-[#E2EFE7] p-8 shadow-sm">
-              <h3 className="font-serif font-bold text-xl text-slate-900 mb-4">Top Dispensed Items</h3>
+              <h3 className="font-sans font-bold text-xl text-slate-900 mb-4">Top Dispensed Items</h3>
               <div className="space-y-3">
                 {inventory.slice(0, 4).map(m => (
                   <div key={m.id} className="flex justify-between items-center py-2 border-b border-[#E2EFE7] text-sm">
@@ -1342,7 +1383,7 @@ export default function ShopDashboard() {
         {/* SETTINGS TAB */}
         {tab === "settings" && (
           <div className="bg-white rounded-[32px] border border-[#E2EFE7] shadow-sm p-8 max-w-2xl">
-            <h2 className="font-serif font-bold text-slate-900 text-2xl mb-2">Pharmacy Settings ⚙️</h2>
+            <h2 className="font-sans font-bold text-slate-900 text-2xl mb-2">Pharmacy Settings ⚙️</h2>
             <p className="text-slate-500 text-sm mb-6">Manage your shop availability, working hours, and contact information.</p>
             
             {settingsSaved && (
@@ -1390,7 +1431,7 @@ export default function ShopDashboard() {
                 </button>
               </div>
               <button onClick={handleSaveSettings} disabled={settingsSaving}
-                className="mt-6 w-full bg-[#1E3A2F] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
+                className="mt-6 w-full bg-[#078B5A] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all flex items-center justify-center gap-2 active:scale-95">
                 <Save size={16} /> {settingsSaving ? "Saving..." : "Save Settings"}
               </button>
             </div>
@@ -1404,7 +1445,7 @@ export default function ShopDashboard() {
           <div className="bg-white rounded-[32px] p-8 max-w-lg w-full shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="font-serif font-bold text-slate-900 text-xl">Assign / Reassign Rider 🚴</h3>
+                <h3 className="font-sans font-bold text-slate-900 text-xl">Assign / Reassign Rider 🚴</h3>
                 <p className="text-xs text-slate-500 font-medium">Order #{reassignModalOrder.id.slice(-6)} • {reassignModalOrder.customer}</p>
               </div>
               <button onClick={() => setReassignModalOrder(null)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100">
@@ -1439,7 +1480,7 @@ export default function ShopDashboard() {
                       disabled={!!assigningRiderId || r.isBusy}
                       title={r.isBusy ? "Rider is currently busy with another delivery" : "Assign this rider"}
                       className={`text-xs font-bold px-5 py-2 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider ${
-                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#1E3A2F] hover:bg-[#152a22] text-white disabled:opacity-50"
+                        r.isBusy ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-[#078B5A] hover:bg-[#152a22] text-white disabled:opacity-50"
                       }`}
                     >
                       {assigningRiderId === r.id ? "Assigning..." : r.isBusy ? "Busy" : "Assign"}
@@ -1463,7 +1504,7 @@ export default function ShopDashboard() {
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-[32px] p-8 max-w-md w-full shadow-2xl border border-slate-100">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="font-serif font-bold text-slate-900 text-xl">Add New Medicine 💊</h3>
+              <h3 className="font-sans font-bold text-slate-900 text-xl">Add New Medicine 💊</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-full hover:bg-slate-100"><X size={20} /></button>
             </div>
             <form onSubmit={handleAddMedicine} className="space-y-4">
@@ -1490,7 +1531,7 @@ export default function ShopDashboard() {
                 </div>
               </div>
               <div className="flex gap-3 pt-4">
-                <button type="submit" className="flex-1 bg-[#1E3A2F] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all">Add to Stock</button>
+                <button type="submit" className="flex-1 bg-[#078B5A] hover:bg-[#152a22] text-white font-bold py-3.5 rounded-full text-xs uppercase tracking-wider shadow-lg transition-all">Add to Stock</button>
                 <button type="button" onClick={() => setShowAddModal(false)} className="bg-slate-100 text-slate-600 font-bold px-6 py-3.5 rounded-full text-xs uppercase tracking-wider">Cancel</button>
               </div>
             </form>
@@ -1509,7 +1550,7 @@ export default function ShopDashboard() {
                   <FileSpreadsheet size={24} />
                 </div>
                 <div>
-                  <h3 className="font-serif font-bold text-slate-900 text-xl flex items-center gap-2">
+                  <h3 className="font-sans font-bold text-slate-900 text-xl flex items-center gap-2">
                     Import Medicine Inventory
                     <span className="text-xs font-sans font-bold bg-[#E8F3ED] text-[#1E3A2F] px-2.5 py-0.5 rounded-full">Excel (.xlsx/.xls) & CSV</span>
                   </h3>
@@ -1533,7 +1574,7 @@ export default function ShopDashboard() {
                   key={s.step}
                   className={`py-2 px-3 rounded-xl text-center transition-all ${
                     importStep === s.step
-                      ? "bg-[#1E3A2F] text-white shadow-sm"
+                      ? "bg-[#078B5A] text-white shadow-sm"
                       : importStep > s.step
                       ? "bg-[#E8F3ED] text-[#1E3A2F]"
                       : "bg-slate-50 text-slate-400"
@@ -1565,7 +1606,7 @@ export default function ShopDashboard() {
                         <button
                           type="button"
                           onClick={downloadSampleExcel}
-                          className="flex items-center gap-1.5 text-xs font-black bg-[#1E3A2F] hover:bg-[#152a22] text-white px-4 py-2.5 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider"
+                          className="flex items-center gap-1.5 text-xs font-black bg-[#078B5A] hover:bg-[#152a22] text-white px-4 py-2.5 rounded-full shadow-sm transition-all active:scale-95 uppercase tracking-wider"
                         >
                           <Download size={13} /> Excel (.xlsx)
                         </button>
@@ -1697,7 +1738,7 @@ export default function ShopDashboard() {
                       <button
                         type="button"
                         onClick={() => setFilterTab("all")}
-                        className={`px-3 py-1.5 rounded-full transition-all ${filterTab === "all" ? "bg-[#1E3A2F] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100"}`}
+                        className={`px-3 py-1.5 rounded-full transition-all ${filterTab === "all" ? "bg-[#078B5A] text-white shadow-sm" : "bg-white text-slate-600 hover:bg-slate-100"}`}
                       >
                         All Records ({parsedRecords.length})
                       </button>
@@ -1867,7 +1908,7 @@ export default function ShopDashboard() {
                                       <button
                                         type="button"
                                         onClick={() => handleSaveInlineEdit(rec.id)}
-                                        className="bg-[#1E3A2F] text-white px-2.5 py-1 rounded-md text-[11px] font-bold mr-1"
+                                        className="bg-[#078B5A] text-white px-2.5 py-1 rounded-md text-[11px] font-bold mr-1"
                                       >
                                         Save
                                       </button>
@@ -1889,8 +1930,8 @@ export default function ShopDashboard() {
                                     <td className="px-3 py-2 text-slate-500">{rec.category || "General"}</td>
                                     <td className="px-3 py-2 font-mono text-slate-600">{rec.batchNumber || "—"}</td>
                                     <td className="px-3 py-2 font-bold text-slate-800">{rec.stock} units</td>
-                                    <td className="px-3 py-2 font-black text-[#1E3A2F]">₹{rec.price.toFixed(2)}</td>
-                                    <td className="px-3 py-2 text-slate-500">{rec.mrp ? `₹${rec.mrp.toFixed(2)}` : "—"}</td>
+                                    <td className="px-3 py-2 font-black text-[#1E3A2F]">{rec.price}</td>
+                                    <td className="px-3 py-2 text-slate-500">{rec.mrp ? rec.mrp : "—"}</td>
                                     <td className="px-3 py-2 text-slate-600">{rec.expiryDate || "—"}</td>
                                     <td className="px-3 py-2 text-slate-600">{rec.stockLocation || "—"}</td>
                                     <td className="px-3 py-2 text-right whitespace-nowrap">
@@ -1942,10 +1983,10 @@ export default function ShopDashboard() {
               {importStep === 4 && importSummary && (
                 <div className="space-y-5 py-4">
                   <div className="bg-[#E8F3ED] border border-[#CDE3D5] rounded-3xl p-6 text-center">
-                    <div className="w-16 h-16 bg-[#1E3A2F] text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
+                    <div className="w-16 h-16 bg-[#078B5A] text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg">
                       <Check size={32} />
                     </div>
-                    <h4 className="text-2xl font-serif font-bold text-slate-900">Inventory Import Complete!</h4>
+                    <h4 className="text-2xl font-sans font-bold text-slate-900">Inventory Import Complete!</h4>
                     <p className="text-xs text-slate-600 mt-1">Your pharmacy stock catalog has been successfully updated in the database.</p>
 
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
@@ -2012,7 +2053,7 @@ export default function ShopDashboard() {
                   <button
                     type="button"
                     onClick={() => setShowImportModal(false)}
-                    className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95"
+                    className="bg-[#078B5A] hover:bg-[#152a22] text-white px-8 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95"
                   >
                     Done & View Inventory
                   </button>
@@ -2034,7 +2075,7 @@ export default function ShopDashboard() {
                           generateAndValidateRecords(columnMapping, rawRows);
                           setImportStep(3);
                         }}
-                        className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
+                        className="bg-[#078B5A] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-1.5"
                       >
                         Continue to Preview <ArrowRight size={13} />
                       </button>
@@ -2045,7 +2086,7 @@ export default function ShopDashboard() {
                         type="button"
                         disabled={importLoading || parsedRecords.filter(r => r.status === "valid" || r.status === "update").length === 0}
                         onClick={handleExecuteImport}
-                        className="bg-[#1E3A2F] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-2"
+                        className="bg-[#078B5A] hover:bg-[#152a22] text-white px-7 py-2.5 rounded-full text-xs font-black uppercase tracking-wider shadow-lg transition-all active:scale-95 disabled:opacity-40 flex items-center gap-2"
                       >
                         {importLoading ? (
                           <>Processing Import...</>
