@@ -17,6 +17,8 @@ import n8n_service
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
+DEFAULT_GOOGLE_CLIENT_ID = "496118015872-qkd71p54tse2r7tk7eeuaa5qfa686410.apps.googleusercontent.com"
+
 def verify_google_id_token(token: str, client_id: str) -> dict:
     """Verifies a Google ID token using the official google-auth library.
     Validates audience, signature, expiry, and issuer."""
@@ -248,7 +250,7 @@ def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
         if not raw_token:
             raise HTTPException(status_code=400, detail="Google ID token is required.")
 
-        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or "").strip().strip('"').strip("'")
+        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or DEFAULT_GOOGLE_CLIENT_ID).strip().strip('"').strip("'")
         if not google_client_id:
             raise HTTPException(
                 status_code=500,
@@ -371,7 +373,7 @@ def link_google(req: schemas.GoogleAuthRequest, current_user: models.User = Depe
         if not raw_token:
             raise HTTPException(status_code=400, detail="Google ID token is required.")
 
-        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or "").strip().strip('"').strip("'")
+        google_client_id = (os.getenv("GOOGLE_CLIENT_ID") or DEFAULT_GOOGLE_CLIENT_ID).strip().strip('"').strip("'")
         if not google_client_id:
             raise HTTPException(
                 status_code=500,

@@ -18,6 +18,7 @@ from routers import rider as rider_router
 from routers import shop as shop_router
 from routers import inventory as inventory_router
 from routers import ai as ai_router
+from routers import seed as seed_router
 
 
 Base.metadata.create_all(bind=engine)
@@ -60,6 +61,25 @@ app.include_router(rider_router.router)
 app.include_router(shop_router.router)
 app.include_router(inventory_router.router)
 app.include_router(ai_router.router)
+app.include_router(seed_router.router)
+
+@app.on_event("startup")
+def on_startup():
+    try:
+        from database import SessionLocal
+        import models
+        from routers.seed import ensure_demo_data_seeded
+        db = SessionLocal()
+        try:
+            if db.query(models.Medicine).count() == 0:
+                print("Database has 0 medicines on startup — auto-seeding demo data...")
+                result = ensure_demo_data_seeded(db)
+                print(f"Startup seed completed: {result.get('message')}")
+        finally:
+            db.close()
+    except Exception as e:
+        print(f"Startup seed notice: {e}")
+
 
 
 @app.get("/health")
