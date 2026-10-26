@@ -4,7 +4,7 @@ import {
   HeartPulse, Package, LogOut, Navigation, CheckCircle, 
   Clock, Activity, MapPin, DollarSign, List, Play, Check, ChevronRight, ShoppingCart, Pill, Globe, X, Star, Award, UserCheck, Edit3, Save, Phone, Home, Truck, AlertCircle
 } from "lucide-react";
-import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, validateSessionWithBackend, saveAuthSession } from "@/lib/auth";
 import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
 import { Button } from "@/components/ui/Button";
 import dynamic from "next/dynamic";
@@ -179,7 +179,7 @@ export default function RiderDashboard() {
   }, []);
 
   useEffect(() => {
-    const u = getStoredUser();
+    const u = getStoredUser("rider");
 
     if (!u) {
       window.location.replace("/?auth=login&role=rider");
@@ -200,13 +200,23 @@ export default function RiderDashboard() {
     });
     setAuthLoading(false);
     fetchRiderData(u.id);
+
+    validateSessionWithBackend("rider").then(validated => {
+      if (!validated) {
+        window.location.replace("/?auth=login&role=rider");
+      } else if (validated.role !== "rider") {
+        window.location.replace(getDashboardUrl(validated.role));
+      } else {
+        setUser(validated as any);
+      }
+    });
     
     const interval = setInterval(() => fetchRiderData(u.id, true), 5000);
     return () => clearInterval(interval);
   }, [fetchRiderData]);
 
   const handleLogout = () => {
-    clearAuthSession();
+    clearAuthSession("rider");
     window.location.replace("/?auth=login&role=rider");
   };
 
@@ -304,8 +314,7 @@ export default function RiderDashboard() {
         
         const updatedUser = { ...user, ...data.user };
         setUser(updatedUser);
-        localStorage.setItem("medifind_user_rider", JSON.stringify(updatedUser));
-        localStorage.setItem("medifind_user", JSON.stringify(updatedUser));
+        saveAuthSession(updatedUser);
 
         fetchRiderData(user.id, true);
         setTimeout(() => setProfileMsg(null), 4000);

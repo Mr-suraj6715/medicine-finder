@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import {
-  getStoredUser, clearAuthSession, getAuthToken,
+  getStoredUser, clearAuthSession, getAuthToken, validateSessionWithBackend,
   type AuthUser
 } from "@/lib/auth";
 import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
@@ -32,6 +32,10 @@ export function Header() {
     const u = getStoredUser();
     setUser(u);
     setAuthLoading(false);
+    // Securely validate session against backend
+    validateSessionWithBackend().then(validated => {
+      if (validated) setUser(validated);
+    });
   }, []);
 
   const handleLogout = () => {

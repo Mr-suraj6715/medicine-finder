@@ -9,7 +9,7 @@ import {
   Upload, Download, FileSpreadsheet, Check, ArrowRight, ArrowLeft, Trash2,
   HelpCircle, Info, Filter, Layers, CheckSquare, Sparkles, FileText, AlertTriangle
 } from "lucide-react";
-import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders } from "@/lib/auth";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, validateSessionWithBackend } from "@/lib/auth";
 import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
 import { Button } from "@/components/ui/Button";
 
@@ -172,7 +172,7 @@ export default function ShopDashboard() {
   const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const u = getStoredUser();
+    const u = getStoredUser("shop_owner");
 
     if (!u) {
       window.location.replace("/?auth=login&role=shop_owner");
@@ -190,6 +190,16 @@ export default function ShopDashboard() {
     fetchShopData(u.id);
     fetchSettings(u.id);
     fetchRiders();
+
+    validateSessionWithBackend("shop_owner").then(validated => {
+      if (!validated) {
+        window.location.replace("/?auth=login&role=shop_owner");
+      } else if (validated.role !== "shop_owner") {
+        setRoleMismatchUser(validated as any);
+      } else {
+        setUser(validated as any);
+      }
+    });
     
     const interval = setInterval(() => {
       fetchShopData(u.id);
@@ -199,7 +209,7 @@ export default function ShopDashboard() {
   }, [fetchShopData, fetchSettings, fetchRiders]);
 
   const handleLogout = () => {
-    clearAuthSession();
+    clearAuthSession("shop_owner");
     window.location.replace("/?auth=login&role=shop_owner");
   };
 
@@ -798,7 +808,7 @@ export default function ShopDashboard() {
     setImportError(null);
 
     try {
-      const token = localStorage.getItem("medifind_token");
+      const token = getAuthToken("shop_owner");
       const payload = {
         pharmacyId: user.id,
         conflictStrategy,
