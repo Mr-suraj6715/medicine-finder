@@ -258,10 +258,9 @@ function TrackingMap({ pharmacyCoord, customerCoord, riderCoord }: { pharmacyCoo
     <div className="w-full h-64 sm:h-72 rounded-[24px] overflow-hidden border border-[#E2EFE7] shadow-inner relative z-0">
       <MapContainer center={[centerLat, centerLng]} zoom={13} scrollWheelZoom={true} style={{ height: "100%", width: "100%" }}>
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
-          url={process.env.NEXT_PUBLIC_CARTO_API_KEY ? `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${process.env.NEXT_PUBLIC_CARTO_API_KEY}` : "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"}
-          subdomains="abcd"
-          maxZoom={20}
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          maxZoom={19}
         />
         <Marker position={[pharmacyCoord.lat, pharmacyCoord.lng]} icon={shopIcon}>
           <Popup>Pharmacy Pickup</Popup>
