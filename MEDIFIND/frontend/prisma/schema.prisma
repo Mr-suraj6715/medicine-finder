@@ -63,6 +63,9 @@ model User {
   email          String     @unique
   password       String?
   role           String     @default("user")   // "user" | "shop_owner" | "rider"
+  googleId       String?    @unique
+  authProvider   String?    @default("local")
+  avatar         String?
   loyaltyPoints  Int        @default(0)
   
   // Rider-specific fields

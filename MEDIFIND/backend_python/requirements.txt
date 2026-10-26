@@ -8,3 +8,5 @@ passlib[bcrypt]
 python-dotenv
 pytest
 httpx
+google-auth
+requests

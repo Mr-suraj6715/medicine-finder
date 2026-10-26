@@ -10,6 +10,31 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List
 import email_service
 import n8n_service
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
+
+def verify_google_id_token(token: str, client_id: str) -> dict:
+    """Verifies a Google ID token using the official google-auth library.
+    Validates audience, signature, expiry, and issuer."""
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            token,
+            google_requests.Request(),
+            client_id
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail="Invalid Google ID token.")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Google token verification failed: {str(e)}")
+
+    issuer = idinfo.get("iss")
+    if issuer not in ["accounts.google.com", "https://accounts.google.com"]:
+        raise HTTPException(status_code=401, detail="Invalid token issuer.")
+
+    if not idinfo.get("email_verified"):
+        raise HTTPException(status_code=400, detail="Google account email is not verified.")
+
+    return idinfo
 
 # In-memory rate limiter for password reset requests: key -> list of UTC timestamps
 RESET_RATE_LIMITS: Dict[str, List[datetime]] = {}
@@ -45,8 +70,6 @@ def normalize_role(r: Optional[str]) -> Optional[str]:
 def login(req: schemas.LoginRequest, db: Session = Depends(get_db)):
     try:
         email = req.email.lower().strip()
-        if not req.password or not req.password.strip():
-            raise HTTPException(status_code=401, detail="Invalid email or password")
 
         user = db.query(models.User).filter(models.User.email == email).first()
         
@@ -209,6 +232,169 @@ def signup(req: schemas.SignupRequest, db: Session = Depends(get_db)):
     except Exception as err:
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(err)}")
 
+@router.post("/google")
+def google_auth(req: schemas.GoogleAuthRequest, db: Session = Depends(get_db)):
+    """Authenticate or register a user using Google Identity Services ID token.
+    - Validates Google token cryptographically with audience, signature, and issuer.
+    - Automatically provisions new accounts as 'user' (Customer role strictly).
+    - Authenticates returning accounts preserving their role and profile.
+    - Rejects unlinked email collisions to prevent silent account takeover."""
+    try:
+        raw_token = req.credential or req.id_token
+        if not raw_token:
+            raise HTTPException(status_code=400, detail="Google ID token is required.")
+
+        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        if not google_client_id:
+            raise HTTPException(
+                status_code=500,
+                detail="Google authentication is not configured on the server. Missing GOOGLE_CLIENT_ID."
+            )
+
+        idinfo = verify_google_id_token(raw_token, google_client_id)
+
+        google_sub = idinfo.get("sub")
+        if not google_sub:
+            raise HTTPException(status_code=400, detail="Malformed Google token: missing subject identifier.")
+
+        email = (idinfo.get("email") or "").lower().strip()
+        if not email:
+            raise HTTPException(status_code=400, detail="Malformed Google token: missing email address.")
+
+        name = idinfo.get("name") or email.split("@")[0]
+        avatar = idinfo.get("picture")
+
+        # 1. Check if user already exists by Google subject identifier
+        user = db.query(models.User).filter(models.User.googleId == google_sub).first()
+
+        if user:
+            user_db_role = normalize_role(user.role) or "user"
+            req_role = normalize_role(req.role)
+            if req_role and req_role in ["user", "shop_owner", "rider"] and user_db_role != req_role:
+                target_role_display = ROLE_MAP.get(user_db_role, "Customer")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"This account is registered as a {target_role_display}. Please switch to the {target_role_display} portal."
+                )
+
+            if avatar and not user.avatar:
+                user.avatar = avatar
+                user.updatedAt = current_iso_time()
+                db.commit()
+
+            access_token = auth.create_token_for_user(user)
+            return {
+                "success": True,
+                "token": access_token,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "role": user_db_role,
+                    "avatar": user.avatar,
+                    "loyaltyPoints": user.loyaltyPoints or 0
+                },
+                "isNewUser": False
+            }
+
+        # 2. Check if user exists by email but has not linked Google ID
+        existing_user_by_email = db.query(models.User).filter(models.User.email == email).first()
+        if existing_user_by_email:
+            raise HTTPException(
+                status_code=409,
+                detail="An account with this email already exists. Please sign in with your email and password to access your account."
+            )
+
+        # 3. First-time registration with Google (Strictly Customer role)
+        new_user = models.User(
+            id=generate_cuid(),
+            name=name.strip(),
+            email=email,
+            password=None,
+            role="user",
+            googleId=google_sub,
+            authProvider="google",
+            avatar=avatar,
+            loyaltyPoints=0,
+            createdAt=current_iso_time(),
+            updatedAt=current_iso_time()
+        )
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
+
+        # Send welcome email via Resend
+        try:
+            email_service.send_welcome_email(recipient_email=email, user_name=name, role="user")
+        except Exception as e:
+            print(f"[AUTH_GOOGLE] Welcome email error: {e}")
+
+        # Fire n8n user.registered event
+        try:
+            n8n_service.emit_user_registered(
+                user_id=new_user.id,
+                email=new_user.email,
+                name=new_user.name,
+                role="user",
+            )
+        except Exception as e:
+            print(f"[AUTH_GOOGLE] n8n event error: {e}")
+
+        access_token = auth.create_token_for_user(new_user)
+        return {
+            "success": True,
+            "token": access_token,
+            "user": {
+                "id": new_user.id,
+                "email": new_user.email,
+                "name": new_user.name,
+                "role": "user",
+                "avatar": new_user.avatar,
+                "loyaltyPoints": 0
+            },
+            "isNewUser": True
+        }
+    except HTTPException:
+        raise
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(err)}")
+
+@router.post("/google/link")
+def link_google(req: schemas.GoogleAuthRequest, current_user: models.User = Depends(auth.get_current_user), db: Session = Depends(get_db)):
+    """Securely link a verified Google identity to an existing authenticated account."""
+    try:
+        raw_token = req.credential or req.id_token
+        if not raw_token:
+            raise HTTPException(status_code=400, detail="Google ID token is required.")
+
+        google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+        if not google_client_id:
+            raise HTTPException(
+                status_code=500,
+                detail="Google authentication is not configured on the server. Missing GOOGLE_CLIENT_ID."
+            )
+
+        idinfo = verify_google_id_token(raw_token, google_client_id)
+        google_sub = idinfo.get("sub")
+
+        # Ensure this Google subject identifier is not already linked to another account
+        existing = db.query(models.User).filter(models.User.googleId == google_sub).first()
+        if existing and existing.id != current_user.id:
+            raise HTTPException(status_code=400, detail="This Google account is already linked to another MediFind account.")
+
+        current_user.googleId = google_sub
+        if not current_user.avatar and idinfo.get("picture"):
+            current_user.avatar = idinfo.get("picture")
+        current_user.updatedAt = current_iso_time()
+        db.commit()
+        db.refresh(current_user)
+
+        return {"success": True, "message": "Google account linked successfully."}
+    except HTTPException:
+        raise
+    except Exception as err:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(err)}")
+
 @router.get("/me")
 def get_me(current_user: models.User = Depends(auth.get_current_user)):
     return {
@@ -218,6 +404,7 @@ def get_me(current_user: models.User = Depends(auth.get_current_user)):
             "email": current_user.email,
             "name": current_user.name,
             "role": current_user.role,
+            "avatar": current_user.avatar,
             "loyaltyPoints": current_user.loyaltyPoints or 0
         }
     }

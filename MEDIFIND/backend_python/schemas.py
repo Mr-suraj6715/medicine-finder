@@ -42,6 +42,17 @@ class SignupRequest(BaseModel):
             return "rider"
         raise ValueError("Invalid role specified. Allowed roles: Customer, Shop Owner, Rider")
 
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = None
+    id_token: Optional[str] = None
+    role: Optional[str] = "user"
+
+    @root_validator(pre=True)
+    def check_token_present(cls, values):
+        if not values.get("credential") and not values.get("id_token"):
+            raise ValueError("Google ID token is required")
+        return values
+
 class AddressCreate(BaseModel):
     userId: Optional[str] = Field(None, max_length=128)
     label: str = Field("Home", max_length=50)
@@ -64,12 +75,9 @@ class AddressCreate(BaseModel):
             raise ValueError("Phone number is required")
         cleaned = re.sub(r"[\s\-\(\)]", "", str(v).strip())
         digits_only = re.sub(r"^\+91|^91|^0", "", cleaned) if cleaned.startswith(("+91", "91", "0")) and len(re.sub(r"\D", "", cleaned)) > 10 else re.sub(r"\D", "", cleaned)
-        if len(digits_only) == 10 and re.match(r"^[6-9]\d{9}$", digits_only):
-            return digits_only
-        all_digits = re.sub(r"\D", "", cleaned)
-        if len(all_digits) < 10 or len(all_digits) > 15:
-            raise ValueError("Enter a valid mobile phone number (10 digits)")
-        return cleaned
+        if not re.match(r"^[6-9]\d{9}$", digits_only):
+            raise ValueError("Enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9")
+        return digits_only
 
     @validator("pincode", pre=True)
     def validate_pincode(cls, v):
