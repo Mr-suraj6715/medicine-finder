@@ -88,7 +88,7 @@ import {
   Activity, History, Stethoscope, User, Store, Eye, EyeOff,
   Package, TrendingUp, Clock, CheckCircle, LogOut, ChevronDown, Check, ArrowRight, Truck, Award, KeyRound
 } from "lucide-react";
-import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, getAuthToken, type AuthUser } from "@/lib/auth";
+import { saveAuthSession, clearAuthSession, getDashboardUrl, getAuthHeaders, getStoredUser, getAuthToken, validateSessionWithBackend, type AuthUser } from "@/lib/auth";
 import GoogleAuthButton from "@/components/auth/GoogleAuthButton";
 
 // ─── Types ────────────────────────────────────────────────────────
@@ -1171,6 +1171,13 @@ export default function Home() {
     const storedUser = getStoredUser();
     if (storedUser) {
       setUser(storedUser);
+      validateSessionWithBackend().then(validated => {
+        if (!validated) {
+          setUser(null);
+        } else {
+          setUser(validated);
+        }
+      });
       if (storedUser.role === "shop_owner") {
         window.location.replace("/dashboard/shop");
         return;
@@ -1290,8 +1297,10 @@ export default function Home() {
         return;
       }
       if (data.orderId || data.trackingNumber) { 
+        const orderIdVal = data.orderId || data.trackingNumber;
         setTrackingOrder(data); 
-        localStorage.setItem("medifind_active_order_id", data.orderId || data.trackingNumber);
+        sessionStorage.setItem("medifind_active_order_id", orderIdVal);
+        localStorage.setItem("medifind_active_order_id", orderIdVal);
         setShowOrderSuccess(true); 
         setCart([]); 
         setIsCartOpen(false); 
@@ -1384,7 +1393,7 @@ export default function Home() {
 
   useEffect(() => {
     const handleActiveOrder = async () => {
-      const activeId = localStorage.getItem("medifind_active_order_id");
+      const activeId = (typeof window !== "undefined" && (sessionStorage.getItem("medifind_active_order_id") || localStorage.getItem("medifind_active_order_id"))) || null;
       if (activeId && user) {
         try {
           const res = await fetch(`/api/orders?email=${user.email}`, { headers: getAuthHeaders() });

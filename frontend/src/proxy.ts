@@ -29,7 +29,17 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname.startsWith("/dashboard")) {
-    const tokenCookie = request.cookies.get("medifind_token")?.value;
+    let tokenCookie: string | undefined;
+    if (pathname.startsWith("/dashboard/shop")) {
+      tokenCookie = request.cookies.get("medifind_token_shop_owner")?.value || request.cookies.get("medifind_token")?.value;
+    } else if (pathname.startsWith("/dashboard/rider")) {
+      tokenCookie = request.cookies.get("medifind_token_rider")?.value || request.cookies.get("medifind_token")?.value;
+    } else if (pathname.startsWith("/dashboard/user")) {
+      tokenCookie = request.cookies.get("medifind_token_user")?.value || request.cookies.get("medifind_token")?.value;
+    } else {
+      tokenCookie = request.cookies.get("medifind_token")?.value;
+    }
+
     const verifiedRole = getVerifiedRoleFromToken(tokenCookie);
     const roleCookie = request.cookies.get("medifind_role")?.value?.toLowerCase().trim();
     const effectiveRole = verifiedRole || roleCookie;

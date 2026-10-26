@@ -5,7 +5,7 @@ import {
   User, Clock, CheckCircle, TrendingUp, Gift, ChevronRight, Search,
   Activity, History, Navigation, X, Menu, Trash2, Eye, Phone, Store, Award, Sparkles, Truck, AlertCircle
 } from "lucide-react";
-import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, AuthUser } from "@/lib/auth";
+import { getStoredUser, clearAuthSession, getDashboardUrl, getAuthHeaders, getAuthToken, validateSessionWithBackend, AuthUser } from "@/lib/auth";
 import { MediFindLogo, MediFindWordmark } from "@/components/brand/MediFindLogo";
 import { Button } from "@/components/ui/Button";
 
@@ -702,7 +702,7 @@ export default function UserDashboard() {
   const [roleMismatchUser, setRoleMismatchUser] = useState<AuthUser | null>(null);
 
   useEffect(() => {
-    const u = getStoredUser();
+    const u = getStoredUser("user");
 
     if (!u) {
       window.location.replace("/?auth=login&role=user");
@@ -718,6 +718,17 @@ export default function UserDashboard() {
     setUser(u as any);
     setLoyaltyPoints(u.loyaltyPoints || 0);
     setAuthLoading(false);
+
+    validateSessionWithBackend("user").then(validated => {
+      if (!validated) {
+        window.location.replace("/?auth=login&role=user");
+      } else if (validated.role !== "user") {
+        setRoleMismatchUser(validated as any);
+      } else {
+        setUser(validated as any);
+        if (validated.loyaltyPoints !== undefined) setLoyaltyPoints(validated.loyaltyPoints);
+      }
+    });
   }, []);
 
   const fetchLoyalty = useCallback(async (email: string) => {
