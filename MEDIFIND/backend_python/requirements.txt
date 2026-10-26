@@ -1,12 +1,11 @@
-fastapi
-uvicorn
+﻿fastapi
+uvicorn[standard]
 sqlalchemy
-pydantic
+pydantic[email]
 psycopg2-binary
 python-jose[cryptography]
 passlib[bcrypt]
 python-dotenv
-pytest
-httpx
 google-auth
 requests
+python-multipart
